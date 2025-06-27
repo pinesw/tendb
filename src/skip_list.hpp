@@ -11,7 +11,7 @@ namespace tendb::skip_list
 {
     struct SkipListNode
     {
-        packed_pair::PackedPair *pair;
+        packed_pair::PackedPair *data;
         SkipListNode *next;
         SkipListNode *down;
     };
@@ -19,7 +19,7 @@ namespace tendb::skip_list
     struct SkipList
     {
     private:
-        constexpr static std::size_t MAX_HEIGHT = 4;
+        constexpr static std::size_t MAX_HEIGHT = 16;
         constexpr static std::size_t MAX_LEVEL = MAX_HEIGHT - 1;
         constexpr static std::double_t P = 0.5;
 
@@ -45,14 +45,88 @@ namespace tendb::skip_list
             }
         }
 
+        SkipList(const SkipList &) = delete;            // Disallow copy construction
+        SkipList &operator=(const SkipList &) = delete; // Disallow copy assignment
+
+        SkipList(SkipList &&other) noexcept : rng(std::move(other.rng)), dist(std::move(other.dist)), heads(std::move(other.heads))
+        {
+            // Reset the moved-from skip list's heads to nullptr
+            for (std::size_t i = 0; i < MAX_HEIGHT; ++i)
+            {
+                other.heads[i] = nullptr;
+            }
+        }
+
+        SkipList &operator=(SkipList &&other) noexcept
+        {
+            if (this != &other)
+            {
+                // Move the data from the other skip list
+                rng = std::move(other.rng);
+                dist = std::move(other.dist);
+                heads = std::move(other.heads);
+
+                // Reset the moved-from skip list's heads to nullptr
+                for (std::size_t i = 0; i < MAX_HEIGHT; ++i)
+                {
+                    other.heads[i] = nullptr;
+                }
+            }
+            return *this;
+        }
+
         ~SkipList()
         {
-            // Delete all levels
+            // Clear the skip list
+            clear();
+
             // Delete all head nodes
+            for (std::size_t i = 0; i < MAX_HEIGHT; ++i)
+            {
+                if (heads[i] != nullptr)
+                {
+                    delete heads[i];
+                }
+            }
+
+            heads.fill(nullptr);
         }
 
         void clear()
         {
+            for (std::size_t i = 0; i < MAX_HEIGHT; ++i)
+            {
+                // Clear from the top level down to the bottom
+                // This ensures that we do not access deleted nodes
+                size_t level = MAX_LEVEL - i;
+
+                if (heads[level] == nullptr)
+                {
+                    continue; // Skip if the head is already null
+                }
+
+                SkipListNode *current = heads[level]->next;
+
+                while (current != nullptr)
+                {
+                    // If this is the first level, delete the data
+                    if (level == 0)
+                    {
+                        delete current->data;
+                        current->data = nullptr;
+                    }
+
+                    SkipListNode *next = current->next;
+                    current->next = nullptr;
+                    current->down = nullptr;
+                    delete current;
+                    current = next;
+                }
+
+                // Reset the head node at this level
+                heads[level]->data = nullptr;
+                heads[level]->next = nullptr;
+            }
         }
 
         void put(std::string_view key, std::string_view value)
@@ -64,7 +138,7 @@ namespace tendb::skip_list
             SkipListNode *current = heads[MAX_HEIGHT - 1];
             for (size_t i = 0; i < MAX_HEIGHT; i++)
             {
-                while (current->next != nullptr && key.compare(current->next->pair->key()) >= 0)
+                while (current->next != nullptr && key.compare(current->next->data->key()) >= 0)
                 {
                     current = current->next;
                 }
@@ -73,11 +147,11 @@ namespace tendb::skip_list
             }
 
             // Check if the key already exists
-            if (history[MAX_LEVEL]->pair != nullptr && key.compare(history[MAX_LEVEL]->pair->key()) == 0)
+            if (history[MAX_LEVEL]->data != nullptr && key.compare(history[MAX_LEVEL]->data->key()) == 0)
             {
                 // Key already exists, update the value
-                delete history[MAX_LEVEL]->pair;
-                history[MAX_LEVEL]->pair = packed_pair;
+                delete history[MAX_LEVEL]->data;
+                history[MAX_LEVEL]->data = packed_pair;
                 return;
             }
 
@@ -123,12 +197,12 @@ namespace tendb::skip_list
 
             packed_pair::PackedPair *operator*() const
             {
-                return current->pair;
+                return current->data;
             }
 
             packed_pair::PackedPair *operator->() const
             {
-                return current->pair;
+                return current->data;
             }
         };
 
@@ -147,7 +221,7 @@ namespace tendb::skip_list
             SkipListNode *current = heads[MAX_HEIGHT - 1];
             for (size_t i = 0; i < MAX_HEIGHT; i++)
             {
-                while (current->next != nullptr && key.compare(current->next->pair->key()) >= 0)
+                while (current->next != nullptr && key.compare(current->next->data->key()) >= 0)
                 {
                     current = current->next;
                 }
@@ -156,7 +230,7 @@ namespace tendb::skip_list
                     current = current->down;
                 }
             }
-            if (current->pair != nullptr && key.compare(current->pair->key()) == 0)
+            if (current->data != nullptr && key.compare(current->data->key()) == 0)
             {
                 return Iterator(current);
             }

@@ -1,3 +1,10 @@
+#include <algorithm>
+#include <chrono>
+#include <iostream>
+#include <map>
+#include <random>
+#include <vector>
+
 #include "../src/skip_list.hpp"
 
 void generate_keys_sequence(uint64_t count, std::vector<std::string> &keys)
@@ -18,8 +25,37 @@ void generate_values_sequence(uint64_t count, std::vector<std::string> &values)
     std::sort(values.begin(), values.end());
 }
 
-void test_skip_list_ordered(const tendb::skip_list::SkipList &skip_list)
+std::vector<std::string> generate_keys()
 {
+    std::vector<std::string> keys;
+    generate_keys_sequence(100, keys);
+    auto rng = std::default_random_engine{};
+    std::shuffle(std::begin(keys), std::end(keys), rng);
+    return keys;
+}
+
+tendb::skip_list::SkipList generate_skip_list(const std::vector<std::string> &keys)
+{
+    tendb::skip_list::SkipList skip_list;
+
+    for (const auto &key : keys)
+    {
+        skip_list.put(key, "value");
+    }
+
+    return skip_list;
+}
+
+tendb::skip_list::SkipList generate_skip_list()
+{
+    std::vector<std::string> keys = generate_keys();
+    return generate_skip_list(keys);
+}
+
+void test_skip_list_ordered()
+{
+    tendb::skip_list::SkipList skip_list = generate_skip_list();
+
     std::string_view last_key;
     for (const auto &pair : skip_list)
     {
@@ -37,8 +73,11 @@ void test_skip_list_ordered(const tendb::skip_list::SkipList &skip_list)
     std::cout << "test_skip_list_ordered done" << std::endl;
 }
 
-void test_skip_list_seek(const tendb::skip_list::SkipList &skip_list, const std::vector<std::string> &keys)
+void test_skip_list_seek()
 {
+    std::vector<std::string> keys = generate_keys();
+    tendb::skip_list::SkipList skip_list = generate_skip_list(keys);
+
     for (const auto &key : keys)
     {
         auto it = skip_list.seek(key);
@@ -66,23 +105,67 @@ void test_skip_list_seek(const tendb::skip_list::SkipList &skip_list, const std:
     std::cout << "test_skip_list_seek done" << std::endl;
 }
 
-int main()
+void test_skip_list_clear()
 {
     tendb::skip_list::SkipList skip_list;
 
-    std::vector<std::string> keys;
-    generate_keys_sequence(100, keys);
+    skip_list.put("key1", "value1");
 
-    auto rng = std::default_random_engine{};
-    std::shuffle(std::begin(keys), std::end(keys), rng);
-
-    for (size_t i = 0; i < keys.size(); ++i)
+    if (skip_list.is_empty())
     {
-        skip_list.put(keys[i], "value");
+        std::cerr << "Error: skip list should not be empty before clear" << std::endl;
+        exit(1);
     }
 
-    test_skip_list_ordered(skip_list);
-    test_skip_list_seek(skip_list, keys);
+    skip_list.clear();
+
+    if (!skip_list.is_empty())
+    {
+        std::cerr << "Error: skip list should be empty after clear" << std::endl;
+        exit(1);
+    }
+
+    std::cout << "test_skip_list_clear done" << std::endl;
+}
+
+void benchmark_skip_list_add()
+{
+    tendb::skip_list::SkipList skip_list;
+
+    auto t1 = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < 100000; i++)
+    {
+        skip_list.put("key_" + std::to_string(i), "value_" + std::to_string(i));
+    }
+    auto t2 = std::chrono::high_resolution_clock::now();
+
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
+    std::cout << "benchmark_skip_list_add: " << duration.count() << "μs" << std::endl;
+}
+
+void benchmark_map_add()
+{
+    std::map<std::string, std::string> map;
+
+    auto t1 = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < 100000; i++)
+    {
+        map.insert({"key_" + std::to_string(i), "value_" + std::to_string(i)});
+    }
+    auto t2 = std::chrono::high_resolution_clock::now();
+
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
+    std::cout << "benchmark_add_map: " << duration.count() << "μs" << std::endl;
+}
+
+int main()
+{
+    test_skip_list_ordered();
+    test_skip_list_seek();
+    test_skip_list_clear();
+
+    benchmark_skip_list_add();
+    benchmark_map_add();
 
     return 0;
 }
