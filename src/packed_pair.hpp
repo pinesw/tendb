@@ -26,9 +26,10 @@ namespace tendb::packed_pair
             str.replace(key_size, value_size, value);
         }
 
-        PackedPair(const PackedPair &) = delete;                               // Disallow copy construction
-        PackedPair &operator=(const PackedPair &) = delete;                    // Disallow copy assignment
-        PackedPair(PackedPair &&other) noexcept : str(std::move(other.str)) {} // Allow move construction
+        PackedPair(const PackedPair &) = delete;            // Disallow copy construction
+        PackedPair &operator=(const PackedPair &) = delete; // Disallow copy assignment
+        PackedPair(PackedPair &&other) noexcept = delete;   // Disallow move construction
+        PackedPair &operator=(PackedPair &&other) = delete; // Disallow move assignment
 
         /**
          * Get the key of the packed pair.
