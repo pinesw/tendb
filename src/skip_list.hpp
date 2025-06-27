@@ -2,6 +2,7 @@
 
 #include <array>
 #include <iostream>
+#include <optional>
 #include <random>
 #include <string_view>
 
@@ -11,7 +12,7 @@ namespace tendb::skip_list
 {
     struct SkipListNode
     {
-    // private:
+        // private:
         packed_pair::PackedPair *data;
         SkipListNode *next;
         SkipListNode *down;
@@ -236,6 +237,16 @@ namespace tendb::skip_list
                 return Iterator(current);
             }
             return end();
+        }
+
+        std::optional<std::string_view> get(std::string_view key) const
+        {
+            auto it = seek(key);
+            if (it != end())
+            {
+                return it->value();
+            }
+            return std::nullopt;
         }
 
     private:
