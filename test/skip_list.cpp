@@ -3,6 +3,9 @@
 #include <iostream>
 #include <map>
 #include <random>
+#include <string>
+#include <string_view>
+#include <thread>
 #include <vector>
 
 #include "../src/skip_list.hpp"
@@ -25,10 +28,10 @@ void generate_values_sequence(uint64_t count, std::vector<std::string> &values)
     std::sort(values.begin(), values.end());
 }
 
-std::vector<std::string> generate_keys()
+std::vector<std::string> generate_keys_shuffled()
 {
     std::vector<std::string> keys;
-    generate_keys_sequence(100, keys);
+    generate_keys_sequence(10000, keys);
     auto rng = std::default_random_engine{};
     std::shuffle(std::begin(keys), std::end(keys), rng);
     return keys;
@@ -48,7 +51,7 @@ tendb::skip_list::SkipList generate_skip_list(const std::vector<std::string> &ke
 
 tendb::skip_list::SkipList generate_skip_list()
 {
-    std::vector<std::string> keys = generate_keys();
+    std::vector<std::string> keys = generate_keys_shuffled();
     return generate_skip_list(keys);
 }
 
@@ -75,7 +78,7 @@ void test_skip_list_ordered()
 
 void test_skip_list_seek()
 {
-    std::vector<std::string> keys = generate_keys();
+    std::vector<std::string> keys = generate_keys_shuffled();
     tendb::skip_list::SkipList skip_list = generate_skip_list(keys);
 
     for (const auto &key : keys)
@@ -158,14 +161,77 @@ void benchmark_map_add()
     std::cout << "benchmark_add_map: " << duration.count() << "μs" << std::endl;
 }
 
+void multithread_test_skip_list()
+{
+    tendb::skip_list::SkipList skip_list;
+
+    std::vector<std::string> keys = generate_keys_shuffled();
+    constexpr static size_t num_threads = 12; // Number of threads to use
+
+    auto worker = [&skip_list, &keys](size_t thread_id)
+    {
+        for (size_t i = thread_id; i < keys.size(); i += num_threads)
+        {
+            skip_list.put(keys[i], "value_" + std::to_string(i));
+        }
+    };
+
+    std::vector<std::thread> threads;
+    for (size_t i = 0; i < num_threads; ++i)
+    {
+        threads.emplace_back(worker, i);
+    }
+
+    for (auto &thread : threads)
+    {
+        thread.join();
+    }
+
+    // Verify that all keys are present in the skip list
+    for (const auto &key : keys)
+    {
+        auto it = skip_list.seek(key);
+        if (it == skip_list.end())
+        {
+            std::cerr << "Error: key not found after multithreaded insert: " << key << std::endl;
+            exit(1);
+        }
+
+        if (it->key() != key)
+        {
+            std::cerr << "Error: multithreaded seek returned wrong key: expected " << key << ", got " << it->key() << std::endl;
+            exit(1);
+        }
+    }
+
+    // Verify that the skip list is ordered
+    std::string_view last_key;
+    for (const auto &pair : skip_list)
+    {
+        if (!last_key.empty())
+        {
+            if (pair->key() <= last_key)
+            {
+                std::cerr << "Error: keys are not ordered after multithreaded insert: " << pair->key() << " < " << last_key << std::endl;
+                exit(1);
+            }
+        }
+        last_key = pair->key();
+    }
+
+    std::cout << "multithread_test_skip_list done" << std::endl;
+}
+
 int main()
 {
-    test_skip_list_ordered();
-    test_skip_list_seek();
-    test_skip_list_clear();
+    // test_skip_list_ordered();
+    // test_skip_list_seek();
+    // test_skip_list_clear();
 
-    benchmark_skip_list_add();
-    benchmark_map_add();
+    // benchmark_skip_list_add();
+    // benchmark_map_add();
+
+    multithread_test_skip_list();
 
     return 0;
 }

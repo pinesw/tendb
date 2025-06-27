@@ -11,6 +11,7 @@ namespace tendb::skip_list
 {
     struct SkipListNode
     {
+    // private:
         packed_pair::PackedPair *data;
         SkipListNode *next;
         SkipListNode *down;
