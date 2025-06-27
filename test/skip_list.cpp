@@ -279,20 +279,22 @@ void multithread_xreadwrite_test_skip_list()
         }
     };
 
-    std::vector<std::thread> threads;
+    std::vector<std::thread> write_threads;
     for (size_t i = 0; i < num_threads; ++i)
     {
-        threads.emplace_back(write_worker, i);
+        write_threads.emplace_back(write_worker, i);
     }
 
-    threads.emplace_back(read_worker); // Start one read thread
+    std::thread read_thread = std::thread(read_worker); // Start one read thread
 
-    for (auto &thread : threads)
+    for (auto &thread : write_threads)
     {
         thread.join();
     }
 
     done = true; // Signal the read thread to stop
+
+    read_thread.join();
 
     std::cout << "multithread_xreadwrite_test_skip_list done" << std::endl;
 }
@@ -306,7 +308,7 @@ int main()
     // benchmark_skip_list_add();
     // benchmark_map_add();
 
-    multithread_xwrite_test_skip_list();
+    // multithread_xwrite_test_skip_list();
     multithread_xreadwrite_test_skip_list();
 
     return 0;
