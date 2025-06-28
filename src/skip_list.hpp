@@ -199,29 +199,21 @@ namespace tendb::skip_list
                 current = current->get_down();
             }
 
-            // Check if the key already exists
-            if (history[MAX_LEVEL]->get_data() != nullptr && key.compare(history[MAX_LEVEL]->get_data()->key()) == 0)
-            {
-                // Key already exists, update the value
-                history[MAX_LEVEL]->set_data(data);
-                return;
-            }
-
             // Insert the new node at each level from 0 to a random level
             size_t level = random_level();
             SkipListNode *down_node = nullptr;
+
             for (size_t i = 0; i <= level; ++i)
             {
                 // The history is built in reverse order (top to bottom), so we need to access it from the end (bottom)
                 size_t history_level = MAX_LEVEL - i;
 
-                char *memory = allocator.allocate(sizeof(SkipListNode));
-                SkipListNode *new_node = new (memory) SkipListNode{data, nullptr, down_node};
-
+                SkipListNode *new_node;
                 bool succeeded = false;
                 while (!succeeded)
                 {
-                    SkipListNode *prev_next = history[history_level]->get_next();
+                    SkipListNode *prev = history[history_level];
+                    SkipListNode *prev_next = prev->get_next();
 
                     // Check that the new node's key is less than the next node's key
                     // During concurrent inserts, another thread may have inserted a node with a key less than the current key
@@ -240,14 +232,28 @@ namespace tendb::skip_list
                     }
                     else
                     {
-                        // We found a valid position to insert the new node, both the previous and next node's keys are oredered before and after the new node's key
+                        // We found a valid position to insert the new node
+
+                        // First check if the key already exists
+                        if (i == 0 && prev->get_data() != nullptr && key.compare(prev->get_data()->key()) == 0)
+                        {
+                            // Key already exists, update the value
+                            prev->set_data(data);
+
+                            // No need to propagate up, just return
+                            return;
+                        }
+
+                        char *memory = allocator.allocate(sizeof(SkipListNode));
+                        new_node = new (memory) SkipListNode{data, nullptr, down_node};
+
                         // Try to set the next pointer of the previous node
                         new_node->override_next(prev_next);
                         succeeded = history[history_level]->set_next(new_node, prev_next);
                     }
                 }
 
-                // Move down to the next level
+                // Before we move up to the next level, set the down pointer of the new node
                 down_node = new_node;
             }
         }
