@@ -48,8 +48,8 @@ namespace tendb::skip_list
         constexpr static std::double_t P = 0.5;
 
         // RNG for random level generation
-        std::mt19937_64 rng;
-        std::uniform_real_distribution<double> dist;
+        static thread_local std::mt19937_64 rng;
+        std::uniform_real_distribution<double> dist{0.0, 1.0};
 
         // Heads of the skip list at each level
         // The index corresponds to the level, with 0 being the bottom level (data level)
@@ -59,7 +59,7 @@ namespace tendb::skip_list
         allocation::BlockAlignedAllocator allocator;
 
     public:
-        SkipList(uint64_t seed = 0) : rng(std::mt19937_64(seed)), dist(0.0, 1.0)
+        SkipList()
         {
             for (std::size_t i = 0; i < MAX_HEIGHT; ++i)
             {
@@ -75,40 +75,19 @@ namespace tendb::skip_list
             }
         }
 
-        SkipList(const SkipList &) = delete;            // Disallow copy construction
-        SkipList &operator=(const SkipList &) = delete; // Disallow copy assignment
+        SkipList(const SkipList &) = delete;                     // Disallow copy construction
+        SkipList &operator=(const SkipList &) = delete;          // Disallow copy assignment
+        SkipList &operator=(SkipList &&other) noexcept = delete; // Disallow move assignment
 
-        SkipList(SkipList &&other) noexcept : rng(std::move(other.rng)), dist(std::move(other.dist)), heads(std::move(other.heads))
+        SkipList(SkipList &&other) noexcept : heads(std::move(other.heads))
         {
             // Reset the moved-from skip list's heads to nullptr
-            for (std::size_t i = 0; i < MAX_HEIGHT; ++i)
-            {
-                other.heads[i] = nullptr;
-            }
-        }
-
-        SkipList &operator=(SkipList &&other) noexcept
-        {
-            if (this != &other)
-            {
-                // Move the data from the other skip list
-                rng = std::move(other.rng);
-                dist = std::move(other.dist);
-                heads = std::move(other.heads);
-
-                // Reset the moved-from skip list's heads to nullptr
-                for (std::size_t i = 0; i < MAX_HEIGHT; ++i)
-                {
-                    other.heads[i] = nullptr;
-                }
-            }
-            return *this;
+            other.heads.fill(nullptr);
         }
 
         ~SkipList()
         {
             // Clear the skip list
-            clear();
             heads.fill(nullptr);
         }
 
@@ -119,11 +98,6 @@ namespace tendb::skip_list
                 // Clear from the top level down to the bottom
                 // This ensures that we do not access deleted nodes
                 size_t level = MAX_LEVEL - i;
-
-                if (heads[level] == nullptr)
-                {
-                    continue; // Skip if the head is already null
-                }
 
                 // Reset the head node at this level
                 heads[level]->next = nullptr;
@@ -263,4 +237,6 @@ namespace tendb::skip_list
             return level;
         }
     };
+
+    thread_local std::mt19937_64 SkipList::rng{std::random_device{}()}; // Initialize thread-local RNG with a random seed
 }
