@@ -210,20 +210,27 @@ void multithread_xwrite_test_skip_list()
     }
 
     // Verify that all keys are present in the skip list
+    size_t found_count = 0;
     for (const auto &key : keys)
     {
         auto it = skip_list.seek(key);
-        if (it == skip_list.end())
-        {
-            std::cerr << "Error: key not found after multithreaded insert: " << key << std::endl;
-            exit(1);
-        }
 
-        if (it->key() != key)
+        if (it != skip_list.end())
         {
-            std::cerr << "Error: multithreaded seek returned wrong key: expected " << key << ", got " << it->key() << std::endl;
-            exit(1);
+            found_count++;
+
+            if (it->key() != key)
+            {
+                std::cerr << "Error: multithreaded seek returned wrong key: expected " << key << ", got " << it->key() << std::endl;
+                exit(1);
+            }
         }
+    }
+
+    if (found_count != keys.size())
+    {
+        std::cerr << "Error: not all keys were found in the skip list after multithreaded insert (found " << found_count << ")" << std::endl;
+        exit(1);
     }
 
     // Verify that the skip list is ordered
