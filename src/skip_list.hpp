@@ -6,14 +6,49 @@
 #include <random>
 #include <string_view>
 
-#include "packed_pair.hpp"
+#include "allocation.hpp"
+// #include "packed_pair.hpp"
 
 namespace tendb::skip_list
 {
+    // TODO: remove value from skip list nodes, keep in a separate data structure (possibly also backed by custom allocator)
+
+    struct Data
+    {
+    private:
+        uint64_t key_size;
+        uint64_t value_size;
+        char *buffer;
+
+    public:
+        Data(char *buffer, std::string_view key, std::string_view value)
+        {
+            this->buffer = buffer;
+            key_size = key.size();
+            value_size = value.size();
+            memcpy(buffer, key.data(), key_size);
+            memcpy(buffer + key_size, value.data(), value_size);
+        }
+
+        Data(const Data &) = delete;            // Disallow copy construction
+        Data &operator=(const Data &) = delete; // Disallow copy assignment
+        Data(Data &&other) noexcept = delete;   // Disallow move construction
+        Data &operator=(Data &&other) = delete; // Disallow move assignment
+
+        std::string_view key() const
+        {
+            return std::string_view(buffer, key_size);
+        }
+
+        std::string_view value() const
+        {
+            return std::string_view(buffer + key_size, value_size);
+        }
+    };
+
     struct SkipListNode
     {
-        // private:
-        packed_pair::PackedPair *data;
+        Data *data;
         SkipListNode *next;
         SkipListNode *down;
     };
@@ -27,7 +62,10 @@ namespace tendb::skip_list
 
         std::mt19937_64 rng;
         std::uniform_real_distribution<double> dist;
+
         std::array<SkipListNode *, MAX_HEIGHT> heads;
+
+        allocation::AlignedBlockAllocator allocator;
 
         // TODO: add thread safety by using atomic operations
 
@@ -36,13 +74,14 @@ namespace tendb::skip_list
         {
             for (std::size_t i = 0; i < MAX_HEIGHT; ++i)
             {
+                char *memory = allocator.allocate(sizeof(SkipListNode));
                 if (i == 0)
                 {
-                    heads[i] = new SkipListNode{nullptr, nullptr, nullptr};
+                    heads[i] = new (memory) SkipListNode{nullptr, nullptr, nullptr};
                 }
                 else
                 {
-                    heads[i] = new SkipListNode{nullptr, nullptr, heads[i - 1]};
+                    heads[i] = new (memory) SkipListNode{nullptr, nullptr, heads[i - 1]};
                 }
             }
         }
@@ -81,16 +120,6 @@ namespace tendb::skip_list
         {
             // Clear the skip list
             clear();
-
-            // Delete all head nodes
-            for (std::size_t i = 0; i < MAX_HEIGHT; ++i)
-            {
-                if (heads[i] != nullptr)
-                {
-                    delete heads[i];
-                }
-            }
-
             heads.fill(nullptr);
         }
 
@@ -107,33 +136,15 @@ namespace tendb::skip_list
                     continue; // Skip if the head is already null
                 }
 
-                SkipListNode *current = heads[level]->next;
-
-                while (current != nullptr)
-                {
-                    // If this is the first level, delete the data
-                    if (level == 0)
-                    {
-                        delete current->data;
-                        current->data = nullptr;
-                    }
-
-                    SkipListNode *next = current->next;
-                    current->next = nullptr;
-                    current->down = nullptr;
-                    delete current;
-                    current = next;
-                }
-
                 // Reset the head node at this level
-                heads[level]->data = nullptr;
                 heads[level]->next = nullptr;
             }
         }
 
         void put(std::string_view key, std::string_view value)
         {
-            packed_pair::PackedPair *packed_pair = new packed_pair::PackedPair(key, value);
+            char *memory = allocator.allocate(sizeof(Data) + key.size() + value.size());
+            Data *data = new (memory) Data(memory + sizeof(Data), key, value);
 
             // Find the position to insert the new nodes at each level
             std::array<SkipListNode *, MAX_HEIGHT> history;
@@ -153,7 +164,7 @@ namespace tendb::skip_list
             {
                 // Key already exists, update the value
                 delete history[MAX_LEVEL]->data;
-                history[MAX_LEVEL]->data = packed_pair;
+                history[MAX_LEVEL]->data = data;
                 return;
             }
 
@@ -163,7 +174,8 @@ namespace tendb::skip_list
 
             for (size_t i = 0; i <= level; ++i)
             {
-                new_node = history[MAX_LEVEL - i]->next = new SkipListNode{packed_pair, history[MAX_LEVEL - i]->next, new_node};
+                char *memory = allocator.allocate(sizeof(SkipListNode));
+                new_node = history[MAX_LEVEL - i]->next = new (memory) SkipListNode{data, history[MAX_LEVEL - i]->next, new_node};
             }
         }
 
@@ -197,12 +209,12 @@ namespace tendb::skip_list
                 return *this;
             }
 
-            packed_pair::PackedPair *operator*() const
+            Data *operator*() const
             {
                 return current->data;
             }
 
-            packed_pair::PackedPair *operator->() const
+            Data *operator->() const
             {
                 return current->data;
             }

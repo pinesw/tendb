@@ -8,7 +8,7 @@
 #include <thread>
 #include <vector>
 
-#include "../src/skip_list.hpp"
+#include "skip_list.hpp"
 
 void generate_keys_sequence(uint64_t count, std::vector<std::string> &keys)
 {
@@ -301,15 +301,15 @@ void multithread_xreadwrite_test_skip_list()
 
 int main()
 {
-    // test_skip_list_ordered();
-    // test_skip_list_seek();
-    // test_skip_list_clear();
+    test_skip_list_ordered();
+    test_skip_list_seek();
+    test_skip_list_clear();
 
-    // benchmark_skip_list_add();
+    benchmark_skip_list_add();
     // benchmark_map_add();
 
     // multithread_xwrite_test_skip_list();
-    multithread_xreadwrite_test_skip_list();
+    // multithread_xreadwrite_test_skip_list();
 
     return 0;
 }
