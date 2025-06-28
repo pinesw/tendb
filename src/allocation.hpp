@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <cassert>
 #include <cstddef>
 #include <deque>
 #include <functional>
@@ -19,6 +20,8 @@ namespace tendb::allocation
 
         char *new_block(size_t size)
         {
+            assert(size > 0 && "Allocation size must be greater than zero");
+
             char *block = new char[size];
 
             mutex.lock();
@@ -31,6 +34,8 @@ namespace tendb::allocation
     public:
         char *allocate(size_t size)
         {
+            assert(size > 0 && "Allocation size must be greater than zero");
+
             return new_block(size);
         }
     };
@@ -61,6 +66,8 @@ namespace tendb::allocation
 
         char *new_block(BlockAlignedAllocatorShard &shard, size_t size)
         {
+            assert(size > 0 && "Allocation size must be greater than zero");
+
             char *block = new char[size];
             shard.blocks.emplace_back(std::unique_ptr<char[]>(block));
             return block;
@@ -68,9 +75,13 @@ namespace tendb::allocation
 
         char *allocate_small(BlockAlignedAllocatorShard &shard, size_t size)
         {
+            assert(size > 0 && "Allocation size must be greater than zero");
+
             size_t padding = -(size_t)shard.current_begin & (ALIGNMENT - 1);
             size_t required_size = size + padding;
             size_t current_size = shard.current_end - shard.current_begin;
+
+            assert(required_size <= BLOCK_SIZE && "Allocation size exceeds block size");
 
             if (required_size > current_size)
             {
@@ -80,8 +91,15 @@ namespace tendb::allocation
                 padding = -(size_t)shard.current_begin & (ALIGNMENT - 1);
             }
 
+            assert(padding >= 0 && padding < ALIGNMENT && "Padding must be non-negative");
+
             char *address = shard.current_begin + padding;
+
+            assert(address >= shard.current_begin && "Address must not be before current begin");
+
             shard.current_begin += size;
+
+            assert(shard.current_begin <= shard.current_end && "Current begin must not exceed current end");
 
             return address;
         }
@@ -89,6 +107,8 @@ namespace tendb::allocation
     public:
         char *allocate(size_t size)
         {
+            assert(size > 0 && "Allocation size must be greater than zero");
+
             size_t shard_index = NUM_SHARDS > 1 ? current_shard_index.fetch_add(1) % NUM_SHARDS : 0;
             shards[shard_index].mutex.lock();
 

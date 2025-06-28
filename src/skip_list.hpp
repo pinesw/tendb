@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cassert>
 #include <iostream>
 #include <optional>
 #include <random>
@@ -54,9 +55,64 @@ namespace tendb::skip_list
 
     struct SkipListNode
     {
+    private:
         Data *data;
-        SkipListNode *next;
+        std::atomic<SkipListNode *> next;
         SkipListNode *down;
+
+    public:
+        SkipListNode(Data *data, SkipListNode *next, SkipListNode *down)
+            : data(data), next(next), down(down) {}
+
+        SkipListNode(const SkipListNode &) = delete;            // Disallow copy construction
+        SkipListNode &operator=(const SkipListNode &) = delete; // Disallow copy assignment
+        SkipListNode(SkipListNode &&) = delete;                 // Disallow move construction
+        SkipListNode &operator=(SkipListNode &&) = delete;      // Disallow move assignment
+
+        bool set_next(SkipListNode *next_node, SkipListNode *prev_expected)
+        {
+            assert(next_node != nullptr && "Next node cannot be null");
+
+            return next.compare_exchange_strong(prev_expected, next_node, std::memory_order_release);
+        }
+
+        void override_next(SkipListNode *next_node)
+        {
+            next.store(next_node, std::memory_order_release);
+        }
+
+        void set_data(Data *data_ptr)
+        {
+            assert(data_ptr != nullptr && "Data pointer cannot be null");
+            assert(data->key() == data_ptr->key() && "Data key must match the existing data key");
+
+            data = data_ptr;
+        }
+
+        void clear_next()
+        {
+            next.store(nullptr, std::memory_order_release);
+        }
+
+        SkipListNode *get_next() const
+        {
+            return next.load(std::memory_order_acquire);
+        }
+
+        SkipListNode *get_next_no_barrier() const
+        {
+            return next.load(std::memory_order_relaxed);
+        }
+
+        SkipListNode *get_down() const
+        {
+            return down;
+        }
+
+        Data *get_data() const
+        {
+            return data;
+        }
     };
 
     struct SkipList
@@ -64,7 +120,7 @@ namespace tendb::skip_list
     private:
         constexpr static std::size_t MAX_HEIGHT = 16;
         constexpr static std::size_t MAX_LEVEL = MAX_HEIGHT - 1;
-        constexpr static std::double_t P = 0.5;
+        constexpr static std::double_t BRANCH_PROBABILITY = 0.5;
 
         // RNG for random level generation
         static thread_local std::mt19937_64 rng;
@@ -120,7 +176,7 @@ namespace tendb::skip_list
                 size_t level = MAX_LEVEL - i;
 
                 // Reset the head node at this level
-                heads[level]->next = nullptr;
+                heads[level]->clear_next();
             }
         }
 
@@ -133,36 +189,66 @@ namespace tendb::skip_list
             SkipListNode *current = heads[MAX_HEIGHT - 1];
             for (size_t i = 0; i < MAX_HEIGHT; i++)
             {
-                while (current->next != nullptr && key.compare(current->next->data->key()) >= 0)
+                SkipListNode *next_node;
+                while ((next_node = current->get_next_no_barrier()) != nullptr && key.compare(next_node->get_data()->key()) >= 0)
                 {
-                    current = current->next;
+                    current = next_node;
                 }
                 history[i] = current;
-                current = current->down;
+                current = current->get_down();
             }
 
             // Check if the key already exists
-            if (history[MAX_LEVEL]->data != nullptr && key.compare(history[MAX_LEVEL]->data->key()) == 0)
+            if (history[MAX_LEVEL]->get_data() != nullptr && key.compare(history[MAX_LEVEL]->get_data()->key()) == 0)
             {
                 // Key already exists, update the value
-                history[MAX_LEVEL]->data = data;
+                history[MAX_LEVEL]->set_data(data);
                 return;
             }
 
-            // Insert the new node at the bottom level
+            // Insert the new node at each level from 0 to a random level
             size_t level = random_level();
-            SkipListNode *new_node = nullptr;
-
+            SkipListNode *down_node = nullptr;
             for (size_t i = 0; i <= level; ++i)
             {
+                // The history is built in reverse order (top to bottom), so we need to access it from the end
+                size_t history_level = MAX_LEVEL - i;
+
                 char *memory = allocator.allocate(sizeof(SkipListNode));
-                new_node = history[MAX_LEVEL - i]->next = new (memory) SkipListNode{data, history[MAX_LEVEL - i]->next, new_node};
+                SkipListNode *new_node = new (memory) SkipListNode{data, nullptr, down_node};
+
+                bool succeeded = false;
+                while (!succeeded)
+                {
+                    SkipListNode *prev_next = history[history_level]->get_next();
+                    new_node->override_next(prev_next);
+
+                    // Try to set the next pointer of the previous node
+                    succeeded = history[history_level]->set_next(new_node, prev_next);
+
+                    if (!succeeded)
+                    {
+                        // We failed to set the previous node's next pointer, which means another thread has inserted a node with a key greater than the previous key
+                        // We need to find the correct position again, starting from the previous node
+
+                        SkipListNode *current = history[history_level];
+                        SkipListNode *next_node;
+                        while ((next_node = current->get_next()) != nullptr && key.compare(next_node->get_data()->key()) >= 0)
+                        {
+                            current = next_node;
+                        }
+                        history[history_level] = current;
+                    }
+                }
+
+                // Move down to the next level
+                down_node = new_node;
             }
         }
 
         bool is_empty() const
         {
-            return heads[0]->next == nullptr;
+            return heads[0]->get_next_no_barrier() == nullptr;
         }
 
         struct Iterator
@@ -185,25 +271,25 @@ namespace tendb::skip_list
             {
                 if (current != nullptr)
                 {
-                    current = current->next;
+                    current = current->get_next_no_barrier();
                 }
                 return *this;
             }
 
             Data *operator*() const
             {
-                return current->data;
+                return current->get_data();
             }
 
             Data *operator->() const
             {
-                return current->data;
+                return current->get_data();
             }
         };
 
         Iterator begin() const
         {
-            return Iterator(heads[0]->next);
+            return Iterator(heads[0]->get_next_no_barrier());
         }
 
         Iterator end() const
@@ -214,21 +300,29 @@ namespace tendb::skip_list
         Iterator seek(std::string_view key) const
         {
             SkipListNode *current = heads[MAX_HEIGHT - 1];
+
+            // Traverse the skip list from the top level down to the bottom
             for (size_t i = 0; i < MAX_HEIGHT; i++)
             {
-                while (current->next != nullptr && key.compare(current->next->data->key()) >= 0)
+                SkipListNode *next_node;
+
+                // Move right in the current level until we find a node with a key greater than or equal to the target key
+                while ((next_node = current->get_next_no_barrier()) != nullptr && key.compare(next_node->get_data()->key()) >= 0)
                 {
-                    current = current->next;
+                    current = next_node;
                 }
+
                 if (i < MAX_HEIGHT - 1)
                 {
-                    current = current->down;
+                    current = current->get_down();
                 }
             }
-            if (current->data != nullptr && key.compare(current->data->key()) == 0)
+
+            if (current->get_data() != nullptr && key.compare(current->get_data()->key()) == 0)
             {
                 return Iterator(current);
             }
+
             return end();
         }
 
@@ -246,7 +340,7 @@ namespace tendb::skip_list
         size_t random_level()
         {
             size_t level = 0;
-            while (dist(rng) < P && level < MAX_HEIGHT - 1)
+            while (dist(rng) < BRANCH_PROBABILITY && level < MAX_HEIGHT - 1)
             {
                 level++;
             }
