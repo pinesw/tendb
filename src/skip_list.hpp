@@ -125,8 +125,8 @@ namespace tendb::skip_list
         std::array<SkipListNode *, MAX_HEIGHT> heads;
 
         // Custom allocator to manage memory for nodes and data
-        allocation::BlockAlignedAllocator allocator;
-        allocation::AllocateFunction allocate = std::bind(&allocation::BlockAlignedAllocator::allocate, &allocator, std::placeholders::_1);
+        allocation::ConcurrentBlockAllocator allocator;
+        allocation::AllocateFunction allocate = std::bind(&allocation::ConcurrentBlockAllocator::allocate, &allocator, std::placeholders::_1);
 
     public:
         SkipList()

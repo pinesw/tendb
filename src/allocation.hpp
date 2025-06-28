@@ -12,7 +12,7 @@ namespace tendb::allocation
 {
     typedef std::function<char *(size_t)> AllocateFunction;
 
-    struct MallocAllocator
+    struct ConcurrentMallocAllocator
     {
     private:
         std::mutex mutex;
@@ -40,7 +40,7 @@ namespace tendb::allocation
         }
     };
 
-    struct BlockAlignedAllocatorShard
+    struct ConcurrentBlockAllocatorShard
     {
         std::deque<std::unique_ptr<char[]>> blocks;
         std::mutex mutex;
@@ -48,7 +48,7 @@ namespace tendb::allocation
         char *current_end = nullptr;
     };
 
-    struct BlockAlignedAllocator
+    struct ConcurrentBlockAllocator
     {
     private:
         constexpr static size_t ALIGNMENT = alignof(std::max_align_t);
@@ -56,7 +56,7 @@ namespace tendb::allocation
         constexpr static size_t BLOCK_SIZE = 4096;
         constexpr static size_t LARGE_ALLOCATION_THRESHOLD = BLOCK_SIZE / 4;
 
-        std::array<BlockAlignedAllocatorShard, NUM_SHARDS> shards;
+        std::array<ConcurrentBlockAllocatorShard, NUM_SHARDS> shards;
         std::atomic<size_t> current_shard_index = 0;
 
         bool is_large_allocation(size_t size) const
@@ -64,7 +64,7 @@ namespace tendb::allocation
             return size > LARGE_ALLOCATION_THRESHOLD;
         }
 
-        char *new_block(BlockAlignedAllocatorShard &shard, size_t size)
+        char *new_block(ConcurrentBlockAllocatorShard &shard, size_t size)
         {
             assert(size > 0 && "Allocation size must be greater than zero");
 
@@ -73,7 +73,7 @@ namespace tendb::allocation
             return block;
         }
 
-        char *allocate_small(BlockAlignedAllocatorShard &shard, size_t size)
+        char *allocate_small(ConcurrentBlockAllocatorShard &shard, size_t size)
         {
             assert(size > 0 && "Allocation size must be greater than zero");
 
@@ -125,6 +125,79 @@ namespace tendb::allocation
             shards[shard_index].mutex.unlock();
 
             return result;
+        }
+    };
+
+    struct BlockAllocator
+    {
+    private:
+        constexpr static size_t ALIGNMENT = alignof(std::max_align_t);
+        constexpr static size_t BLOCK_SIZE = 4096;
+        constexpr static size_t LARGE_ALLOCATION_THRESHOLD = BLOCK_SIZE / 4;
+
+        std::deque<std::unique_ptr<char[]>> blocks;
+        std::mutex mutex;
+        char *current_begin = nullptr;
+        char *current_end = nullptr;
+
+        bool is_large_allocation(size_t size) const
+        {
+            return size > LARGE_ALLOCATION_THRESHOLD;
+        }
+
+        char *new_block(size_t size)
+        {
+            assert(size > 0 && "Allocation size must be greater than zero");
+
+            char *block = new char[size];
+            blocks.emplace_back(std::unique_ptr<char[]>(block));
+            return block;
+        }
+
+        char *allocate_small(size_t size)
+        {
+            assert(size > 0 && "Allocation size must be greater than zero");
+
+            size_t padding = -(size_t)current_begin & (ALIGNMENT - 1);
+            size_t required_size = size + padding;
+            size_t current_size = current_end - current_begin;
+
+            assert(required_size <= BLOCK_SIZE && "Allocation size exceeds block size");
+
+            if (required_size > current_size)
+            {
+                char *block = new_block(BLOCK_SIZE);
+                current_begin = block;
+                current_end = block + BLOCK_SIZE;
+                padding = -(size_t)current_begin & (ALIGNMENT - 1);
+            }
+
+            assert(padding >= 0 && padding < ALIGNMENT && "Padding must be non-negative");
+
+            char *address = current_begin + padding;
+
+            assert(address >= current_begin && "Address must not be before current begin");
+
+            current_begin += size;
+
+            assert(current_begin <= current_end && "Current begin must not exceed current end");
+
+            return address;
+        }
+
+    public:
+        char *allocate(size_t size)
+        {
+            assert(size > 0 && "Allocation size must be greater than zero");
+
+            if (is_large_allocation(size))
+            {
+                return new_block(size);
+            }
+            else
+            {
+                return allocate_small(size);
+            }
         }
     };
 }
