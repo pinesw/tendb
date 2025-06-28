@@ -12,10 +12,9 @@
 
 namespace tendb::skip_list
 {
-    // TODO: remove value from skip list nodes, keep in a separate data structure (possibly also backed by custom allocator)
+    // TODO: consider:
+    // Remove value from skip list nodes, keep in a separate data structure (possibly also backed by custom allocator)
     // In fact, remove value from skip list entirely? Eventually we just need a pointer to some value data...
-
-    // TODO: add thread safety by using atomic operations
 
     struct Data
     {

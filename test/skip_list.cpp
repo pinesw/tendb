@@ -144,6 +144,50 @@ void test_skip_list_clear()
 }
 
 /**
+ * Test that the skip list can handle duplicate keys.
+ * This test will insert the same key multiple times and check that the last inserted value is returned.
+ */
+void test_skip_list_duplicate_keys()
+{
+    tendb::skip_list::SkipList skip_list;
+    std::vector<std::string> keys = generate_keys_shuffled();
+
+    for (const auto &key : keys)
+    {
+        // Ensure the key is not present initially
+        if (skip_list.get(key).has_value())
+        {
+            std::cerr << "Error: key should not be present before insert: " << key << std::endl;
+            exit(1);
+        }
+    }
+
+    for (const auto &key : keys)
+    {
+        skip_list.put(key, "value1");
+
+        if (skip_list.get(key) != "value1")
+        {
+            std::cerr << "Error: value for key should be 'value1' after first insert" << std::endl;
+            exit(1);
+        }
+    }
+
+    for (const auto &key : keys)
+    {
+        skip_list.put(key, "value2");
+
+        if (skip_list.get(key) != "value2")
+        {
+            std::cerr << "Error: value for key should be 'value2' after second insert" << std::endl;
+            exit(1);
+        }
+    }
+
+    std::cout << "test_skip_list_duplicate_keys done" << std::endl;
+}
+
+/**
  * Benchmark the performance of adding key-value pairs to the skip list.
  */
 void benchmark_skip_list_add()
@@ -159,6 +203,40 @@ void benchmark_skip_list_add()
 
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
     std::cout << "benchmark_skip_list_add: " << duration.count() << "μs" << std::endl;
+}
+
+/**
+ * Benchmark the performance of adding key-value pairs to the skip list in a multithreaded manner.
+ */
+void benchmark_skip_list_add_multithreaded()
+{
+    constexpr static size_t num_threads = 12; // Number of threads to use
+
+    tendb::skip_list::SkipList skip_list;
+
+    auto worker = [&skip_list](size_t thread_id)
+    {
+        for (size_t i = thread_id; i < 100000; i += num_threads)
+        {
+            skip_list.put("key_" + std::to_string(i), "value_" + std::to_string(i));
+        }
+    };
+
+    std::vector<std::thread> threads;
+    auto t1 = std::chrono::high_resolution_clock::now();
+    for (size_t i = 0; i < num_threads; ++i)
+    {
+        threads.emplace_back(worker, i);
+    }
+
+    for (auto &thread : threads)
+    {
+        thread.join();
+    }
+    auto t2 = std::chrono::high_resolution_clock::now();
+
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
+    std::cout << "benchmark_skip_list_add_multithreaded: " << duration.count() << "μs" << std::endl;
 }
 
 /**
@@ -183,7 +261,7 @@ void benchmark_map_add()
  * Multithreaded test for writing to the skip list.
  * This test will insert keys in a multithreaded manner and verify that all keys are present and ordered.
  */
-void multithread_xwrite_test_skip_list()
+void test_skip_list_multithread_xwrite()
 {
     constexpr static size_t num_threads = 12; // Number of threads to use
 
@@ -311,14 +389,15 @@ int main()
     test_skip_list_ordered();
     test_skip_list_seek();
     test_skip_list_clear();
+    test_skip_list_duplicate_keys();
+
+    test_skip_list_multithread_xwrite();
+
+    // multithread_xreadwrite_test_skip_list(); // test to verify concurrent read/write operations
 
     benchmark_skip_list_add();
+    benchmark_skip_list_add_multithreaded();
     benchmark_map_add();
-
-    // TODO: add benchmark for multithreaded skip list add
-
-    multithread_xwrite_test_skip_list();
-    // multithread_xreadwrite_test_skip_list();
 
     return 0;
 }
