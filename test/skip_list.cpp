@@ -306,9 +306,9 @@ int main()
     test_skip_list_clear();
 
     benchmark_skip_list_add();
-    // benchmark_map_add();
+    benchmark_map_add();
 
-    // multithread_xwrite_test_skip_list();
+    multithread_xwrite_test_skip_list();
     // multithread_xreadwrite_test_skip_list();
 
     return 0;

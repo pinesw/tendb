@@ -12,28 +12,15 @@
 namespace tendb::skip_list
 {
     // TODO: remove value from skip list nodes, keep in a separate data structure (possibly also backed by custom allocator)
+    // In fact, remove value from skip list entirely? Eventually we just need a pointer to some value data...
 
-    struct Data
+    // TODO: add thread safety by using atomic operations
+
+    struct DataHandle
     {
-    private:
-        uint64_t key_size;
-        uint64_t value_size;
-        char *buffer;
-
-    public:
-        Data(char *buffer, std::string_view key, std::string_view value)
-        {
-            this->buffer = buffer;
-            key_size = key.size();
-            value_size = value.size();
-            memcpy(buffer, key.data(), key_size);
-            memcpy(buffer + key_size, value.data(), value_size);
-        }
-
-        Data(const Data &) = delete;            // Disallow copy construction
-        Data &operator=(const Data &) = delete; // Disallow copy assignment
-        Data(Data &&other) noexcept = delete;   // Disallow move construction
-        Data &operator=(Data &&other) = delete; // Disallow move assignment
+        size_t key_size;
+        size_t value_size;
+        char buffer[1];
 
         std::string_view key() const
         {
@@ -48,7 +35,7 @@ namespace tendb::skip_list
 
     struct SkipListNode
     {
-        Data *data;
+        DataHandle *data;
         SkipListNode *next;
         SkipListNode *down;
     };
@@ -65,9 +52,7 @@ namespace tendb::skip_list
 
         std::array<SkipListNode *, MAX_HEIGHT> heads;
 
-        allocation::AlignedBlockAllocator allocator;
-
-        // TODO: add thread safety by using atomic operations
+        allocation::BlockAlignedAllocator allocator;
 
     public:
         SkipList(uint64_t seed = 0) : rng(std::mt19937_64(seed)), dist(0.0, 1.0)
@@ -143,8 +128,11 @@ namespace tendb::skip_list
 
         void put(std::string_view key, std::string_view value)
         {
-            char *memory = allocator.allocate(sizeof(Data) + key.size() + value.size());
-            Data *data = new (memory) Data(memory + sizeof(Data), key, value);
+            // Allocate memory for the new DataHandle and initialize it
+            char *memory = allocator.allocate(sizeof(DataHandle) + key.size() + value.size() - 1);
+            DataHandle *data = new (memory) DataHandle{key.size(), value.size(), {0}};
+            std::memcpy(data->buffer, key.data(), key.size());
+            std::memcpy(data->buffer + key.size(), value.data(), value.size());
 
             // Find the position to insert the new nodes at each level
             std::array<SkipListNode *, MAX_HEIGHT> history;
@@ -163,7 +151,6 @@ namespace tendb::skip_list
             if (history[MAX_LEVEL]->data != nullptr && key.compare(history[MAX_LEVEL]->data->key()) == 0)
             {
                 // Key already exists, update the value
-                delete history[MAX_LEVEL]->data;
                 history[MAX_LEVEL]->data = data;
                 return;
             }
@@ -209,12 +196,12 @@ namespace tendb::skip_list
                 return *this;
             }
 
-            Data *operator*() const
+            DataHandle *operator*() const
             {
                 return current->data;
             }
 
-            Data *operator->() const
+            DataHandle *operator->() const
             {
                 return current->data;
             }
