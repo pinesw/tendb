@@ -16,7 +16,7 @@ namespace tendb::skip_list
 
     // TODO: add thread safety by using atomic operations
 
-    struct DataHandle
+    struct Data
     {
         size_t key_size;
         size_t value_size;
@@ -35,7 +35,7 @@ namespace tendb::skip_list
 
     struct SkipListNode
     {
-        DataHandle *data;
+        Data *data;
         SkipListNode *next;
         SkipListNode *down;
     };
@@ -47,11 +47,15 @@ namespace tendb::skip_list
         constexpr static std::size_t MAX_LEVEL = MAX_HEIGHT - 1;
         constexpr static std::double_t P = 0.5;
 
+        // RNG for random level generation
         std::mt19937_64 rng;
         std::uniform_real_distribution<double> dist;
 
+        // Heads of the skip list at each level
+        // The index corresponds to the level, with 0 being the bottom level (data level)
         std::array<SkipListNode *, MAX_HEIGHT> heads;
 
+        // Custom allocator to manage memory for nodes and data
         allocation::BlockAlignedAllocator allocator;
 
     public:
@@ -128,9 +132,9 @@ namespace tendb::skip_list
 
         void put(std::string_view key, std::string_view value)
         {
-            // Allocate memory for the new DataHandle and initialize it
-            char *memory = allocator.allocate(sizeof(DataHandle) + key.size() + value.size() - 1);
-            DataHandle *data = new (memory) DataHandle{key.size(), value.size(), {0}};
+            // Allocate memory for the new Data and initialize it
+            char *memory = allocator.allocate(sizeof(Data) + key.size() + value.size() - 1);
+            Data *data = new (memory) Data{key.size(), value.size(), {0}};
             std::memcpy(data->buffer, key.data(), key.size());
             std::memcpy(data->buffer + key.size(), value.data(), value.size());
 
@@ -196,12 +200,12 @@ namespace tendb::skip_list
                 return *this;
             }
 
-            DataHandle *operator*() const
+            Data *operator*() const
             {
                 return current->data;
             }
 
-            DataHandle *operator->() const
+            Data *operator->() const
             {
                 return current->data;
             }

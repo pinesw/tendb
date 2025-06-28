@@ -308,6 +308,8 @@ int main()
     benchmark_skip_list_add();
     benchmark_map_add();
 
+    // TODO: add benchmark for multithreaded skip list add
+
     multithread_xwrite_test_skip_list();
     // multithread_xreadwrite_test_skip_list();
 
