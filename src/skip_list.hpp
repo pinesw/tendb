@@ -69,16 +69,16 @@ namespace tendb::skip_list
         SkipListNode(SkipListNode &&) = delete;                 // Disallow move construction
         SkipListNode &operator=(SkipListNode &&) = delete;      // Disallow move assignment
 
-        bool set_next(SkipListNode *next_node, SkipListNode *prev_expected)
+        bool set_next(SkipListNode *new_next, SkipListNode *prev_expected)
         {
-            assert(next_node != nullptr && "Next node cannot be null");
+            assert(new_next != nullptr && "Next node cannot be null");
 
-            return next.compare_exchange_strong(prev_expected, next_node, std::memory_order_release);
+            return next.compare_exchange_strong(prev_expected, new_next, std::memory_order_release);
         }
 
-        void override_next(SkipListNode *next_node)
+        void override_next(SkipListNode *new_next)
         {
-            next.store(next_node, std::memory_order_release);
+            next.store(new_next, std::memory_order_release);
         }
 
         void set_data(Data *data_ptr)
@@ -184,7 +184,8 @@ namespace tendb::skip_list
         {
             Data *data = Data::create(key, value, allocate);
 
-            // Find the position to insert the new nodes at each level
+            // Find the approximate position to insert the new nodes at each level
+            // The actual position can change due to concurrent inserts, which we will handle later
             std::array<SkipListNode *, MAX_HEIGHT> history;
             SkipListNode *current = heads[MAX_HEIGHT - 1];
             for (size_t i = 0; i < MAX_HEIGHT; i++)
@@ -211,7 +212,7 @@ namespace tendb::skip_list
             SkipListNode *down_node = nullptr;
             for (size_t i = 0; i <= level; ++i)
             {
-                // The history is built in reverse order (top to bottom), so we need to access it from the end
+                // The history is built in reverse order (top to bottom), so we need to access it from the end (bottom)
                 size_t history_level = MAX_LEVEL - i;
 
                 char *memory = allocator.allocate(sizeof(SkipListNode));
@@ -221,23 +222,28 @@ namespace tendb::skip_list
                 while (!succeeded)
                 {
                     SkipListNode *prev_next = history[history_level]->get_next();
-                    new_node->override_next(prev_next);
 
-                    // Try to set the next pointer of the previous node
-                    succeeded = history[history_level]->set_next(new_node, prev_next);
-
-                    if (!succeeded)
+                    // Check that the new node's key is less than the next node's key
+                    // During concurrent inserts, another thread may have inserted a node with a key less than the current key
+                    if (prev_next != nullptr && key.compare(prev_next->get_data()->key()) >= 0)
                     {
-                        // We failed to set the previous node's next pointer, which means another thread has inserted a node with a key greater than the previous key
-                        // We need to find the correct position again, starting from the previous node
+                        // The next node's key is greater than or equal to the current key, so we cannot insert here
+                        // We need to find the correct position again, starting from the new previous node
 
-                        SkipListNode *current = history[history_level];
+                        SkipListNode *current = prev_next;
                         SkipListNode *next_node;
                         while ((next_node = current->get_next()) != nullptr && key.compare(next_node->get_data()->key()) >= 0)
                         {
                             current = next_node;
                         }
                         history[history_level] = current;
+                    }
+                    else
+                    {
+                        // We found a valid position to insert the new node, both the previous and next node's keys are oredered before and after the new node's key
+                        // Try to set the next pointer of the previous node
+                        new_node->override_next(prev_next);
+                        succeeded = history[history_level]->set_next(new_node, prev_next);
                     }
                 }
 
