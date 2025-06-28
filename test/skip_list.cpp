@@ -8,6 +8,7 @@
 #include <thread>
 #include <vector>
 
+#include "allocation.hpp"
 #include "skip_list.hpp"
 
 void generate_keys_sequence(uint64_t count, std::vector<std::string> &keys)
@@ -193,12 +194,14 @@ void test_skip_list_duplicate_keys()
 void benchmark_skip_list_add()
 {
     tendb::skip_list::SkipList skip_list;
+    tendb::allocation::BlockAllocator allocator;
+    tendb::allocation::AllocateFunction allocate = std::bind(&tendb::allocation::BlockAllocator::allocate, &allocator, std::placeholders::_1);
     std::vector<std::string> keys = generate_keys_shuffled(100000);
 
     auto t1 = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < 100000; i++)
     {
-        skip_list.put(keys[i], "value_" + std::to_string(i));
+        skip_list.put(keys[i], "value_" + std::to_string(i), allocate);
     }
     auto t2 = std::chrono::high_resolution_clock::now();
 
@@ -211,24 +214,26 @@ void benchmark_skip_list_add()
  */
 void benchmark_skip_list_add_multithreaded()
 {
-    constexpr static size_t num_threads = 12; // Number of threads to use
+    constexpr static size_t num_threads = 12;
     std::vector<std::string> keys = generate_keys_shuffled(100000);
 
     tendb::skip_list::SkipList skip_list;
 
-    auto worker = [&skip_list, &keys](size_t thread_id)
+    auto worker = [&skip_list, &keys](size_t thread_id, tendb::allocation::BlockAllocator &allocator)
     {
+        tendb::allocation::AllocateFunction allocate = std::bind(&tendb::allocation::BlockAllocator::allocate, &allocator, std::placeholders::_1);
         for (size_t i = thread_id; i < 100000; i += num_threads)
         {
-            skip_list.put(keys[i], "value_" + std::to_string(i));
+            skip_list.put(keys[i], "value_" + std::to_string(i), allocate);
         }
     };
 
     std::vector<std::thread> threads;
+    std::vector<tendb::allocation::BlockAllocator> allocators(num_threads);
     auto t1 = std::chrono::high_resolution_clock::now();
     for (size_t i = 0; i < num_threads; ++i)
     {
-        threads.emplace_back(worker, i);
+        threads.emplace_back(worker, i, std::ref(allocators[i]));
     }
 
     for (auto &thread : threads)

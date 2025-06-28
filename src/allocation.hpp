@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <cassert>
 #include <cstddef>
@@ -12,7 +13,7 @@ namespace tendb::allocation
 {
     typedef std::function<char *(size_t)> AllocateFunction;
 
-    struct ConcurrentMallocAllocator
+    struct ConcurrentMalloc
     {
     private:
         std::mutex mutex;
@@ -47,6 +48,10 @@ namespace tendb::allocation
         char *current_begin = nullptr;
         char *current_end = nullptr;
     };
+
+    // TODO: ConcurrentBlockAllocator becomes the bottleneck when many threads are writing to the skip list.
+    // Find a way to speed up allocations.
+    // Alternatively, give up and use one synchronous allocator per thread.
 
     struct ConcurrentBlockAllocator
     {
@@ -128,6 +133,35 @@ namespace tendb::allocation
         }
     };
 
+    struct FixedSizeArena
+    {
+    private:
+        size_t size;
+        std::unique_ptr<char[]> memory;
+        char *current_begin;
+
+    public:
+        FixedSizeArena(size_t size)
+        {
+            assert(size > 0 && "Arena size must be greater than zero");
+
+            this->size = size;
+            memory = std::make_unique<char[]>(size);
+            current_begin = memory.get();
+        }
+
+        char *allocate(size_t size)
+        {
+            assert(size > 0 && "Allocation size must be greater than zero");
+            assert(current_begin + size <= memory.get() + this->size && "Allocation exceeds arena size");
+
+            char *address = current_begin;
+            current_begin += size;
+
+            return address;
+        }
+    };
+
     struct BlockAllocator
     {
     private:
@@ -136,7 +170,6 @@ namespace tendb::allocation
         constexpr static size_t LARGE_ALLOCATION_THRESHOLD = BLOCK_SIZE / 4;
 
         std::deque<std::unique_ptr<char[]>> blocks;
-        std::mutex mutex;
         char *current_begin = nullptr;
         char *current_end = nullptr;
 

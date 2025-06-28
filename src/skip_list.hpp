@@ -8,7 +8,6 @@
 #include <string_view>
 
 #include "allocation.hpp"
-// #include "packed_pair.hpp"
 
 namespace tendb::skip_list
 {
@@ -124,16 +123,18 @@ namespace tendb::skip_list
         // The index corresponds to the level, with 0 being the bottom level (data level)
         std::array<SkipListNode *, MAX_HEIGHT> heads;
 
-        // Custom allocator to manage memory for nodes and data
-        allocation::ConcurrentBlockAllocator allocator;
-        allocation::AllocateFunction allocate = std::bind(&allocation::ConcurrentBlockAllocator::allocate, &allocator, std::placeholders::_1);
+        // Default allocator to manage memory for nodes and data
+        allocation::ConcurrentBlockAllocator default_allocator;
+        allocation::AllocateFunction default_allocate = std::bind(&allocation::ConcurrentBlockAllocator::allocate, &default_allocator, std::placeholders::_1);
+
+        allocation::FixedSizeArena head_allocator{MAX_HEIGHT * sizeof(SkipListNode)};
 
     public:
         SkipList()
         {
             for (std::size_t i = 0; i < MAX_HEIGHT; ++i)
             {
-                char *memory = allocator.allocate(sizeof(SkipListNode));
+                char *memory = head_allocator.allocate(sizeof(SkipListNode));
                 if (i == 0)
                 {
                     heads[i] = new (memory) SkipListNode{nullptr, nullptr, nullptr};
@@ -175,6 +176,12 @@ namespace tendb::skip_list
         }
 
         void put(std::string_view key, std::string_view value)
+        {
+            // Use the default allocator to allocate memory for the new Data
+            put(key, value, default_allocate);
+        }
+
+        void put(std::string_view key, std::string_view value, allocation::AllocateFunction allocate)
         {
             Data *data = Data::create(key, value, allocate);
 
@@ -238,7 +245,7 @@ namespace tendb::skip_list
                             return;
                         }
 
-                        char *memory = allocator.allocate(sizeof(SkipListNode));
+                        char *memory = allocate(sizeof(SkipListNode));
                         new_node = new (memory) SkipListNode{data, nullptr, down_node};
 
                         // Try to set the next pointer of the previous node
