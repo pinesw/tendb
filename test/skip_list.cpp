@@ -28,10 +28,10 @@ void generate_values_sequence(uint64_t count, std::vector<std::string> &values)
     std::sort(values.begin(), values.end());
 }
 
-std::vector<std::string> generate_keys_shuffled()
+std::vector<std::string> generate_keys_shuffled(size_t count = 10000)
 {
     std::vector<std::string> keys;
-    generate_keys_sequence(10000, keys);
+    generate_keys_sequence(count, keys);
     auto rng = std::default_random_engine{};
     std::shuffle(std::begin(keys), std::end(keys), rng);
     return keys;
@@ -193,11 +193,12 @@ void test_skip_list_duplicate_keys()
 void benchmark_skip_list_add()
 {
     tendb::skip_list::SkipList skip_list;
+    std::vector<std::string> keys = generate_keys_shuffled(100000);
 
     auto t1 = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < 100000; i++)
     {
-        skip_list.put("key_" + std::to_string(i), "value_" + std::to_string(i));
+        skip_list.put(keys[i], "value_" + std::to_string(i));
     }
     auto t2 = std::chrono::high_resolution_clock::now();
 
@@ -211,14 +212,15 @@ void benchmark_skip_list_add()
 void benchmark_skip_list_add_multithreaded()
 {
     constexpr static size_t num_threads = 12; // Number of threads to use
+    std::vector<std::string> keys = generate_keys_shuffled(100000);
 
     tendb::skip_list::SkipList skip_list;
 
-    auto worker = [&skip_list](size_t thread_id)
+    auto worker = [&skip_list, &keys](size_t thread_id)
     {
         for (size_t i = thread_id; i < 100000; i += num_threads)
         {
-            skip_list.put("key_" + std::to_string(i), "value_" + std::to_string(i));
+            skip_list.put(keys[i], "value_" + std::to_string(i));
         }
     };
 
@@ -326,7 +328,7 @@ void test_skip_list_multithread_xwrite()
         last_key = pair->key();
     }
 
-    std::cout << "multithread_test_skip_list done" << std::endl;
+    std::cout << "test_skip_list_multithread_xwrite done" << std::endl;
 }
 
 /**

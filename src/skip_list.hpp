@@ -72,12 +72,12 @@ namespace tendb::skip_list
         {
             assert(new_next != nullptr && "Next node cannot be null");
 
-            return next.compare_exchange_strong(prev_expected, new_next, std::memory_order_release);
+            return next.compare_exchange_strong(prev_expected, new_next, std::memory_order_relaxed);
         }
 
         void override_next(SkipListNode *new_next)
         {
-            next.store(new_next, std::memory_order_release);
+            next.store(new_next, std::memory_order_relaxed);
         }
 
         void set_data(Data *data_ptr)
@@ -90,15 +90,10 @@ namespace tendb::skip_list
 
         void clear_next()
         {
-            next.store(nullptr, std::memory_order_release);
+            next.store(nullptr, std::memory_order_relaxed);
         }
 
         SkipListNode *get_next() const
-        {
-            return next.load(std::memory_order_acquire);
-        }
-
-        SkipListNode *get_next_no_barrier() const
         {
             return next.load(std::memory_order_relaxed);
         }
@@ -190,7 +185,7 @@ namespace tendb::skip_list
             for (size_t i = 0; i < MAX_HEIGHT; i++)
             {
                 SkipListNode *next_node;
-                while ((next_node = current->get_next_no_barrier()) != nullptr && key.compare(next_node->get_data()->key()) >= 0)
+                while ((next_node = current->get_next()) != nullptr && key.compare(next_node->get_data()->key()) >= 0)
                 {
                     current = next_node;
                 }
@@ -259,7 +254,7 @@ namespace tendb::skip_list
 
         bool is_empty() const
         {
-            return heads[0]->get_next_no_barrier() == nullptr;
+            return heads[0]->get_next() == nullptr;
         }
 
         struct Iterator
@@ -282,7 +277,7 @@ namespace tendb::skip_list
             {
                 if (current != nullptr)
                 {
-                    current = current->get_next_no_barrier();
+                    current = current->get_next();
                 }
                 return *this;
             }
@@ -300,7 +295,7 @@ namespace tendb::skip_list
 
         Iterator begin() const
         {
-            return Iterator(heads[0]->get_next_no_barrier());
+            return Iterator(heads[0]->get_next());
         }
 
         Iterator end() const
@@ -318,7 +313,7 @@ namespace tendb::skip_list
                 SkipListNode *next_node;
 
                 // Move right in the current level until we find a node with a key greater than or equal to the target key
-                while ((next_node = current->get_next_no_barrier()) != nullptr && key.compare(next_node->get_data()->key()) >= 0)
+                while ((next_node = current->get_next()) != nullptr && key.compare(next_node->get_data()->key()) >= 0)
                 {
                     current = next_node;
                 }
