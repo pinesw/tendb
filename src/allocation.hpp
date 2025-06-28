@@ -114,7 +114,7 @@ namespace tendb::allocation
         {
             assert(size > 0 && "Allocation size must be greater than zero");
 
-            size_t shard_index = NUM_SHARDS > 1 ? current_shard_index.fetch_add(1) % NUM_SHARDS : 0;
+            size_t shard_index = NUM_SHARDS > 1 ? current_shard_index.fetch_add(1, std::memory_order_relaxed) % NUM_SHARDS : 0;
             shards[shard_index].mutex.lock();
 
             char *result;
