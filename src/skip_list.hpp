@@ -18,9 +18,28 @@ namespace tendb::skip_list
 
     struct Data
     {
+    private:
         size_t key_size;
         size_t value_size;
         char buffer[1];
+
+        Data(size_t key_size, size_t value_size) : key_size(key_size), value_size(value_size) {}
+
+        Data(const Data &) = delete;
+        Data(Data &&) = delete;
+        Data &operator=(const Data &) = delete;
+        Data &operator=(Data &&) = delete;
+
+    public:
+        static Data *create(std::string_view key, std::string_view value, allocation::AllocateFunction allocate)
+        {
+            // Allocate memory for the new Data and initialize it
+            char *memory = allocate(sizeof(Data) + key.size() + value.size() - 1);
+            Data *data = new (memory) Data{key.size(), value.size()};
+            std::memcpy(data->buffer, key.data(), key.size());
+            std::memcpy(data->buffer + key.size(), value.data(), value.size());
+            return data;
+        }
 
         std::string_view key() const
         {
@@ -57,6 +76,7 @@ namespace tendb::skip_list
 
         // Custom allocator to manage memory for nodes and data
         allocation::BlockAlignedAllocator allocator;
+        allocation::AllocateFunction allocate = std::bind(&allocation::BlockAlignedAllocator::allocate, &allocator, std::placeholders::_1);
 
     public:
         SkipList()
@@ -106,11 +126,7 @@ namespace tendb::skip_list
 
         void put(std::string_view key, std::string_view value)
         {
-            // Allocate memory for the new Data and initialize it
-            char *memory = allocator.allocate(sizeof(Data) + key.size() + value.size() - 1);
-            Data *data = new (memory) Data{key.size(), value.size(), {0}};
-            std::memcpy(data->buffer, key.data(), key.size());
-            std::memcpy(data->buffer + key.size(), value.data(), value.size());
+            Data *data = Data::create(key, value, allocate);
 
             // Find the position to insert the new nodes at each level
             std::array<SkipListNode *, MAX_HEIGHT> history;

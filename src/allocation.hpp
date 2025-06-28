@@ -3,12 +3,13 @@
 #include <atomic>
 #include <cstddef>
 #include <deque>
+#include <functional>
 #include <memory>
 #include <mutex>
 
 namespace tendb::allocation
 {
-    // TODO: add thread safety to the allocators
+    typedef std::function<char *(size_t)> AllocateFunction;
 
     struct MallocAllocator
     {
