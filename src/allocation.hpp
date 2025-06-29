@@ -182,40 +182,11 @@ namespace tendb::allocation
 
         struct Shard
         {
-            std::deque<std::unique_ptr<char[]>> blocks;
+            BlockAllocator allocator;
             std::mutex mutex;
-            char *current_begin = nullptr;
-            char *current_end = nullptr;
         };
 
         core_local::CoreLocalArray<Shard> shards;
-
-        char *new_block_safe(Shard *shard, size_t requested_size)
-        {
-            assert(requested_size > 0 && "Allocation size must be greater than zero");
-
-            char *block = new char[requested_size];
-            shard->blocks.emplace_back(std::unique_ptr<char[]>(block));
-            return block;
-        }
-
-        char *allocate_from_shard_safe(Shard *shard, size_t requested_size)
-        {
-            requested_size += -requested_size & (ALIGNMENT - 1); // add padding to align to ALIGNMENT
-            size_t current_size = shard->current_end - shard->current_begin;
-
-            if (requested_size > current_size)
-            {
-                char *block = new_block_safe(shard, BLOCK_SIZE);
-                shard->current_begin = block;
-                shard->current_end = block + BLOCK_SIZE;
-            }
-
-            char *address = shard->current_begin;
-            shard->current_begin += requested_size;
-
-            return address;
-        }
 
     public:
         char *allocate(size_t requested_size)
@@ -232,7 +203,7 @@ namespace tendb::allocation
                 shard->mutex.lock();
             }
 
-            char *address = allocate_from_shard_safe(shard, requested_size);
+            char *address = shard->allocator.allocate(requested_size);
             shard->mutex.unlock();
             return address;
         }
