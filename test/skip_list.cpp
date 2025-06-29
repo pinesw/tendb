@@ -201,6 +201,7 @@ void benchmark_skip_list_add()
     auto t1 = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < 100000; i++)
     {
+        // skip_list.put(keys[i], "value_" + std::to_string(i));
         skip_list.put(keys[i], "value_" + std::to_string(i), allocate);
     }
     auto t2 = std::chrono::high_resolution_clock::now();
@@ -219,21 +220,23 @@ void benchmark_skip_list_add_multithreaded()
 
     tendb::skip_list::SkipList skip_list;
 
-    auto worker = [&skip_list, &keys](size_t thread_id, tendb::allocation::BlockAllocator &allocator)
+    // std::vector<tendb::allocation::ConcurrentSmallBlockAllocator> allocators(num_threads);
+    auto worker = [&](size_t thread_id)
     {
-        // tendb::allocation::AllocateFunction allocate = std::bind(&tendb::allocation::BlockAllocator::allocate, &allocator, std::placeholders::_1);
+        // tendb::allocation::AllocateFunction allocate = std::bind(&tendb::allocation::BlockAllocator::allocate, allocators[thread_id], std::placeholders::_1);
+        // tendb::allocation::AllocateFunction allocate = std::bind(&tendb::allocation::ConcurrentSmallBlockAllocator::allocate, allocators[thread_id], std::placeholders::_1);
         for (size_t i = thread_id; i < 100000; i += num_threads)
         {
             skip_list.put(keys[i], "value_" + std::to_string(i));
+            // skip_list.put(keys[i], "value_" + std::to_string(i), allocate);
         }
     };
 
     std::vector<std::thread> threads;
-    std::vector<tendb::allocation::BlockAllocator> allocators(num_threads);
     auto t1 = std::chrono::high_resolution_clock::now();
     for (size_t i = 0; i < num_threads; ++i)
     {
-        threads.emplace_back(worker, i, std::ref(allocators[i]));
+        threads.emplace_back(worker, i);
     }
 
     for (auto &thread : threads)

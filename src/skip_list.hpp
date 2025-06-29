@@ -1,7 +1,9 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <cassert>
+#include <cstring>
 #include <iostream>
 #include <optional>
 #include <random>
@@ -14,6 +16,12 @@ namespace tendb::skip_list
     // TODO: consider:
     // Remove value from skip list nodes, keep in a separate data structure (possibly also backed by custom allocator)
     // In fact, remove value from skip list entirely? Eventually we just need a pointer to some value data...
+
+    // RNG for random level generation
+    static thread_local std::mt19937_64 rng{std::random_device{}()}; // Initialize thread-local RNG with a random seed
+    static thread_local std::uniform_real_distribution<double> dist{0.0, 1.0};
+    static thread_local allocation::BlockAllocator default_allocator;
+    static thread_local allocation::AllocateFunction default_allocate = std::bind(&allocation::BlockAllocator::allocate, &default_allocator, std::placeholders::_1);
 
     struct Data
     {
@@ -30,7 +38,7 @@ namespace tendb::skip_list
         Data &operator=(Data &&) = delete;
 
     public:
-        static Data *create(std::string_view key, std::string_view value, allocation::AllocateFunction allocate)
+        static Data *create(std::string_view key, std::string_view value, const allocation::AllocateFunction &allocate)
         {
             // Allocate memory for the new Data and initialize it
             char *memory = allocate(sizeof(Data) + key.size() + value.size() - 1);
@@ -115,17 +123,16 @@ namespace tendb::skip_list
         constexpr static std::size_t MAX_LEVEL = MAX_HEIGHT - 1;
         constexpr static std::double_t BRANCH_PROBABILITY = 0.5;
 
-        // RNG for random level generation
-        static thread_local std::mt19937_64 rng;
-        std::uniform_real_distribution<double> dist{0.0, 1.0};
-
         // Heads of the skip list at each level
         // The index corresponds to the level, with 0 being the bottom level (data level)
         std::array<SkipListNode *, MAX_HEIGHT> heads;
 
         // Default allocator to manage memory for nodes and data
-        allocation::ConcurrentShardedBlockAllocator default_allocator;
-        allocation::AllocateFunction default_allocate = std::bind(&allocation::ConcurrentShardedBlockAllocator::allocate, &default_allocator, std::placeholders::_1);
+        // allocation::ConcurrentSmallBlockAllocator default_allocator;
+        // allocation::AllocateFunction default_allocate = std::bind(&allocation::ConcurrentSmallBlockAllocator::allocate, &default_allocator, std::placeholders::_1);
+
+        // static thread_local allocation::BlockAllocator default_allocator;
+        // static thread_local allocation::AllocateFunction default_allocate;
 
         allocation::FixedSizeArena head_allocator{MAX_HEIGHT * sizeof(SkipListNode)};
 
@@ -181,7 +188,7 @@ namespace tendb::skip_list
             put(key, value, default_allocate);
         }
 
-        void put(std::string_view key, std::string_view value, allocation::AllocateFunction allocate)
+        void put(std::string_view key, std::string_view value, const allocation::AllocateFunction &allocate)
         {
             Data *data = Data::create(key, value, allocate);
 
@@ -360,6 +367,4 @@ namespace tendb::skip_list
             return level;
         }
     };
-
-    thread_local std::mt19937_64 SkipList::rng{std::random_device{}()}; // Initialize thread-local RNG with a random seed
 }
