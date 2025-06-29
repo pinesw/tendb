@@ -51,7 +51,7 @@ namespace tendb::skip_list
         }
     };
 
-    struct SkipListNode
+    struct alignas(alignof(std::max_align_t)) SkipListNode
     {
     private:
         Data *data;
@@ -124,8 +124,8 @@ namespace tendb::skip_list
         std::array<SkipListNode *, MAX_HEIGHT> heads;
 
         // Default allocator to manage memory for nodes and data
-        allocation::ConcurrentBlockAllocator default_allocator;
-        allocation::AllocateFunction default_allocate = std::bind(&allocation::ConcurrentBlockAllocator::allocate, &default_allocator, std::placeholders::_1);
+        allocation::ConcurrentShardedBlockAllocator default_allocator;
+        allocation::AllocateFunction default_allocate = std::bind(&allocation::ConcurrentShardedBlockAllocator::allocate, &default_allocator, std::placeholders::_1);
 
         allocation::FixedSizeArena head_allocator{MAX_HEIGHT * sizeof(SkipListNode)};
 

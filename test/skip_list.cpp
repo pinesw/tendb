@@ -221,10 +221,10 @@ void benchmark_skip_list_add_multithreaded()
 
     auto worker = [&skip_list, &keys](size_t thread_id, tendb::allocation::BlockAllocator &allocator)
     {
-        tendb::allocation::AllocateFunction allocate = std::bind(&tendb::allocation::BlockAllocator::allocate, &allocator, std::placeholders::_1);
+        // tendb::allocation::AllocateFunction allocate = std::bind(&tendb::allocation::BlockAllocator::allocate, &allocator, std::placeholders::_1);
         for (size_t i = thread_id; i < 100000; i += num_threads)
         {
-            skip_list.put(keys[i], "value_" + std::to_string(i), allocate);
+            skip_list.put(keys[i], "value_" + std::to_string(i));
         }
     };
 
