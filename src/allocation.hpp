@@ -20,11 +20,9 @@ namespace tendb::allocation
         std::mutex mutex;
         std::deque<std::unique_ptr<char[]>> blocks;
 
-        char *new_block(size_t size)
+        char *new_block(size_t requested_size)
         {
-            assert(size > 0 && "Allocation size must be greater than zero");
-
-            char *block = new char[size];
+            char *block = new char[requested_size];
 
             mutex.lock();
             blocks.emplace_back(std::unique_ptr<char[]>(block));
@@ -34,11 +32,11 @@ namespace tendb::allocation
         }
 
     public:
-        char *allocate(size_t size)
+        char *allocate(size_t requested_size)
         {
-            assert(size > 0 && "Allocation size must be greater than zero");
+            assert(requested_size > 0 && "Allocation size must be greater than zero");
 
-            return new_block(size);
+            return new_block(requested_size);
         }
     };
 
@@ -52,9 +50,9 @@ namespace tendb::allocation
         char *current_begin = nullptr;
         char *current_end = nullptr;
 
-        bool is_large_allocation(size_t size) const
+        bool is_large_allocation(size_t requested_size) const
         {
-            return size > LARGE_ALLOCATION_THRESHOLD;
+            return requested_size > LARGE_ALLOCATION_THRESHOLD;
         }
 
         char *new_block(size_t size)
@@ -66,49 +64,39 @@ namespace tendb::allocation
             return block;
         }
 
-        char *allocate_small(size_t size)
+        char *allocate_small(size_t requested_size)
         {
-            assert(size > 0 && "Allocation size must be greater than zero");
+            assert(requested_size > 0 && "Allocation size must be greater than zero");
+            assert(requested_size <= BLOCK_SIZE && "Allocation size exceeds block size");
 
-            size_t padding = -(size_t)current_begin & (ALIGNMENT - 1);
-            size_t required_size = size + padding;
+            requested_size += -requested_size & (ALIGNMENT - 1); // add padding to align to ALIGNMENT
             size_t current_size = current_end - current_begin;
 
-            assert(required_size <= BLOCK_SIZE && "Allocation size exceeds block size");
-
-            if (required_size > current_size)
+            if (requested_size > current_size)
             {
                 char *block = new_block(BLOCK_SIZE);
                 current_begin = block;
                 current_end = block + BLOCK_SIZE;
-                padding = -(size_t)current_begin & (ALIGNMENT - 1);
             }
 
-            assert(padding >= 0 && padding < ALIGNMENT && "Padding must be non-negative");
-
-            char *address = current_begin + padding;
-
-            assert(address >= current_begin && "Address must not be before current begin");
-
-            current_begin += size;
-
-            assert(current_begin <= current_end && "Current begin must not exceed current end");
+            char *address = current_begin;
+            current_begin += requested_size;
 
             return address;
         }
 
     public:
-        char *allocate(size_t size)
+        char *allocate(size_t requested_size)
         {
-            assert(size > 0 && "Allocation size must be greater than zero");
+            assert(requested_size > 0 && "Allocation size must be greater than zero");
 
-            if (is_large_allocation(size))
+            if (is_large_allocation(requested_size))
             {
-                return new_block(size);
+                return new_block(requested_size);
             }
             else
             {
-                return allocate_small(size);
+                return allocate_small(requested_size);
             }
         }
     };
@@ -145,11 +133,6 @@ namespace tendb::allocation
         }
 
     public:
-        ~ConcurrentSmallBlockAllocator()
-        {
-            std::cout << "ConcurrentSmallBlockAllocator number of blocks allocated: " << blocks.size() << std::endl;
-        }
-
         bool is_large_allocation(size_t requested_size) const
         {
             return requested_size > LARGE_ALLOCATION_THRESHOLD;
@@ -158,10 +141,9 @@ namespace tendb::allocation
         char *allocate(size_t requested_size)
         {
             assert(requested_size > 0 && "Allocation size must be greater than zero");
+            assert(requested_size <= BLOCK_SIZE && "Requested size exceeds block size");
 
             requested_size += -requested_size & (ALIGNMENT - 1); // add padding to align to ALIGNMENT
-
-            assert(requested_size <= BLOCK_SIZE && "Requested size exceeds block size");
 
             size_t current_index_and_size;
             size_t current_size;
@@ -189,10 +171,6 @@ namespace tendb::allocation
             return current_begin;
         }
     };
-
-    // TODO: ConcurrentBlockAllocator becomes the bottleneck when many threads are writing to the skip list.
-    // Find a way to speed up allocations.
-    // Alternatively, give up and use one synchronous allocator per thread.
 
     struct ConcurrentShardedBlockAllocator
     {
@@ -284,27 +262,28 @@ namespace tendb::allocation
     struct FixedSizeArena
     {
     private:
-        size_t size;
         std::unique_ptr<char[]> memory;
         char *current_begin;
+        size_t remaining_size;
 
     public:
         FixedSizeArena(size_t size)
         {
             assert(size > 0 && "Arena size must be greater than zero");
 
-            this->size = size;
             memory = std::make_unique<char[]>(size);
             current_begin = memory.get();
+            remaining_size = size;
         }
 
-        char *allocate(size_t size)
+        char *allocate(size_t requested_size)
         {
-            assert(size > 0 && "Allocation size must be greater than zero");
-            assert(current_begin + size <= memory.get() + this->size && "Allocation exceeds arena size");
+            assert(requested_size > 0 && "Allocation size must be greater than zero");
+            assert(requested_size <= remaining_size && "Allocation exceeds arena size");
 
             char *address = current_begin;
-            current_begin += size;
+            current_begin += requested_size;
+            remaining_size -= requested_size;
 
             return address;
         }
