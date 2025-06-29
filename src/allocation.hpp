@@ -9,10 +9,13 @@
 #include <memory>
 #include <mutex>
 
+#include "core_local.hpp"
+
 namespace tendb::allocation
 {
     typedef std::function<char *(size_t)> AllocateFunction;
     constexpr static size_t ALIGNMENT = alignof(std::max_align_t);
+    static thread_local size_t cpu_id = core_local::access_index();
 
     struct ConcurrentMalloc
     {
@@ -172,9 +175,11 @@ namespace tendb::allocation
         }
     };
 
-    struct ConcurrentShardedBlockAllocator
+    struct CoreLocalShardAllocator
     {
     private:
+        constexpr static size_t BLOCK_SIZE = 4096;
+
         struct Shard
         {
             std::deque<std::unique_ptr<char[]>> blocks;
@@ -183,79 +188,53 @@ namespace tendb::allocation
             char *current_end = nullptr;
         };
 
-        constexpr static size_t NUM_SHARDS = 4;
-        constexpr static size_t BLOCK_SIZE = 4096;
-        constexpr static size_t LARGE_ALLOCATION_THRESHOLD = BLOCK_SIZE / 4;
+        core_local::CoreLocalArray<Shard> shards;
 
-        std::array<Shard, NUM_SHARDS> shards;
-        std::atomic<size_t> current_shard_index = 0;
-
-        bool is_large_allocation(size_t size) const
+        char *new_block_safe(Shard *shard, size_t requested_size)
         {
-            return size > LARGE_ALLOCATION_THRESHOLD;
-        }
+            assert(requested_size > 0 && "Allocation size must be greater than zero");
 
-        char *new_block(Shard &shard, size_t size)
-        {
-            assert(size > 0 && "Allocation size must be greater than zero");
-
-            char *block = new char[size];
-            shard.blocks.emplace_back(std::unique_ptr<char[]>(block));
+            char *block = new char[requested_size];
+            shard->blocks.emplace_back(std::unique_ptr<char[]>(block));
             return block;
         }
 
-        char *allocate_small(Shard &shard, size_t size)
+        char *allocate_from_shard_safe(Shard *shard, size_t requested_size)
         {
-            assert(size > 0 && "Allocation size must be greater than zero");
+            requested_size += -requested_size & (ALIGNMENT - 1); // add padding to align to ALIGNMENT
+            size_t current_size = shard->current_end - shard->current_begin;
 
-            size_t padding = -(size_t)shard.current_begin & (ALIGNMENT - 1);
-            size_t required_size = size + padding;
-            size_t current_size = shard.current_end - shard.current_begin;
-
-            assert(required_size <= BLOCK_SIZE && "Allocation size exceeds block size");
-
-            if (required_size > current_size)
+            if (requested_size > current_size)
             {
-                char *block = new_block(shard, BLOCK_SIZE);
-                shard.current_begin = block;
-                shard.current_end = block + BLOCK_SIZE;
-                padding = -(size_t)shard.current_begin & (ALIGNMENT - 1);
+                char *block = new_block_safe(shard, BLOCK_SIZE);
+                shard->current_begin = block;
+                shard->current_end = block + BLOCK_SIZE;
             }
 
-            assert(padding >= 0 && padding < ALIGNMENT && "Padding must be non-negative");
-
-            char *address = shard.current_begin + padding;
-
-            assert(address >= shard.current_begin && "Address must not be before current begin");
-
-            shard.current_begin += size;
-
-            assert(shard.current_begin <= shard.current_end && "Current begin must not exceed current end");
+            char *address = shard->current_begin;
+            shard->current_begin += requested_size;
 
             return address;
         }
 
     public:
-        char *allocate(size_t size)
+        char *allocate(size_t requested_size)
         {
-            assert(size > 0 && "Allocation size must be greater than zero");
+            assert(requested_size > 0 && "Allocation size must be greater than zero");
+            assert(requested_size <= BLOCK_SIZE && "Requested size exceeds block size");
 
-            size_t shard_index = NUM_SHARDS > 1 ? current_shard_index.fetch_add(1, std::memory_order_relaxed) % NUM_SHARDS : 0;
-            shards[shard_index].mutex.lock();
+            Shard *shard = shards.access_at_core(cpu_id);
 
-            char *result;
-            if (is_large_allocation(size))
+            if (!shard->mutex.try_lock())
             {
-                result = new_block(shards[shard_index], size);
-            }
-            else
-            {
-                result = allocate_small(shards[shard_index], size);
+                cpu_id = core_local::access_index();
+                shard = shards.access_at_core(cpu_id);
+                shard->mutex.lock();
             }
 
-            shards[shard_index].mutex.unlock();
-
-            return result;
+            char *address = allocate_from_shard_safe(shard, requested_size);
+            shard->mutex.unlock();
+            return address;
         }
     };
 

@@ -199,7 +199,7 @@ void benchmark_skip_list_add()
     std::vector<std::string> keys = generate_keys_shuffled(100000);
 
     auto t1 = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < 100000; i++)
+    for (int i = 0; i < keys.size(); i++)
     {
         // skip_list.put(keys[i], "value_" + std::to_string(i));
         skip_list.put(keys[i], "value_" + std::to_string(i), allocate);
@@ -220,15 +220,11 @@ void benchmark_skip_list_add_multithreaded()
 
     tendb::skip_list::SkipList skip_list;
 
-    // std::vector<tendb::allocation::ConcurrentSmallBlockAllocator> allocators(num_threads);
     auto worker = [&](size_t thread_id)
     {
-        // tendb::allocation::AllocateFunction allocate = std::bind(&tendb::allocation::BlockAllocator::allocate, allocators[thread_id], std::placeholders::_1);
-        // tendb::allocation::AllocateFunction allocate = std::bind(&tendb::allocation::ConcurrentSmallBlockAllocator::allocate, allocators[thread_id], std::placeholders::_1);
-        for (size_t i = thread_id; i < 100000; i += num_threads)
+        for (size_t i = thread_id; i < keys.size(); i += num_threads)
         {
             skip_list.put(keys[i], "value_" + std::to_string(i));
-            // skip_list.put(keys[i], "value_" + std::to_string(i), allocate);
         }
     };
 

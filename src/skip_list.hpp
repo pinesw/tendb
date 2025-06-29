@@ -20,8 +20,6 @@ namespace tendb::skip_list
     // RNG for random level generation
     static thread_local std::mt19937_64 rng{std::random_device{}()}; // Initialize thread-local RNG with a random seed
     static thread_local std::uniform_real_distribution<double> dist{0.0, 1.0};
-    static thread_local allocation::BlockAllocator default_allocator;
-    static thread_local allocation::AllocateFunction default_allocate = std::bind(&allocation::BlockAllocator::allocate, &default_allocator, std::placeholders::_1);
 
     struct Data
     {
@@ -128,11 +126,8 @@ namespace tendb::skip_list
         std::array<SkipListNode *, MAX_HEIGHT> heads;
 
         // Default allocator to manage memory for nodes and data
-        // allocation::ConcurrentSmallBlockAllocator default_allocator;
-        // allocation::AllocateFunction default_allocate = std::bind(&allocation::ConcurrentSmallBlockAllocator::allocate, &default_allocator, std::placeholders::_1);
-
-        // static thread_local allocation::BlockAllocator default_allocator;
-        // static thread_local allocation::AllocateFunction default_allocate;
+        allocation::CoreLocalShardAllocator default_allocator;
+        allocation::AllocateFunction default_allocate = std::bind(&allocation::CoreLocalShardAllocator::allocate, &default_allocator, std::placeholders::_1);
 
         allocation::FixedSizeArena head_allocator{MAX_HEIGHT * sizeof(SkipListNode)};
 

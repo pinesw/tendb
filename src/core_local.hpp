@@ -10,29 +10,48 @@
 
 namespace tendb::core_local
 {
+    static size_t get_size()
+    {
+        size_t num_cpus = static_cast<size_t>(std::thread::hardware_concurrency());
+        size_t size_shift = 3;
+        while (1 << size_shift < num_cpus)
+        {
+            ++size_shift;
+        }
+        return static_cast<size_t>(1) << size_shift;
+    }
+
+    static size_t size = get_size();
+
+    static size_t get_size_mask()
+    {
+        return size - 1;
+    }
+
+    static size_t size_mask = get_size_mask();
+
+    static size_t round_robin_index = 0;
+
+    static size_t access_index()
+    {
+        int cpuid = port::physical_core_id();
+        if (cpuid < 0)
+        {
+            return round_robin_index++ & size_mask;
+        }
+        else
+        {
+            return cpuid & size_mask;
+        }
+    }
+
     template <typename T>
-    class core_local_array
+    class CoreLocalArray
     {
     private:
-        std::unique_ptr<T[]> data;
-        size_t size;
-        size_t size_mask;
-        size_t round_robin_index = 0;
+        std::unique_ptr<T[]> data = std::make_unique<T[]>(size);
 
     public:
-        core_local_array()
-        {
-            size_t num_cpus = static_cast<size_t>(std::thread::hardware_concurrency());
-            size_t size_shift = 3;
-            while (1 << size_shift < num_cpus)
-            {
-                ++size_shift;
-            }
-            size = static_cast<size_t>(1) << size_shift;
-            size_mask = size - 1;
-            data.reset(new T[size]);
-        }
-
         size_t get_size() const
         {
             return size;
@@ -45,16 +64,7 @@ namespace tendb::core_local
 
         std::pair<T *, size_t> access_element_and_index() const
         {
-            int cpuid = port::physical_core_id();
-            size_t core_idx;
-            if (cpuid < 0)
-            {
-                core_idx = round_robin_index++ & size_mask;
-            }
-            else
-            {
-                core_idx = cpuid & size_mask;
-            }
+            size_t core_idx = access_index();
             return {access_at_core(core_idx), core_idx};
         }
 
