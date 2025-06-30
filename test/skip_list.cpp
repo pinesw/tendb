@@ -8,7 +8,6 @@
 #include <thread>
 #include <vector>
 
-#include "allocation.hpp"
 #include "skip_list.hpp"
 
 constexpr static size_t BENCHMARK_NUM_KEYS = 100000;
@@ -191,20 +190,50 @@ void test_skip_list_duplicate_keys()
 }
 
 /**
+ * Test that the skip list can handle a large keys and values.
+ */
+void test_skip_list_large_data()
+{
+    tendb::skip_list::SkipList skip_list;
+    std::string large_key_base(1000, 'k');      // 1000 characters long key
+    std::string large_value_base(1000000, 'v'); // 1 million characters long value
+
+    for (size_t i = 0; i < 1000; ++i)
+    {
+        std::string large_key = large_key_base + std::to_string(i);
+        std::string large_value = large_value_base + std::to_string(i);
+
+        skip_list.put(large_key, large_value);
+
+        auto it = skip_list.seek(large_key);
+        if (it == skip_list.end())
+        {
+            std::cerr << "Error: key not found after insert: " << large_key << std::endl;
+            exit(1);
+        }
+
+        if (it->value() != large_value)
+        {
+            std::cerr << "Error: value for key should match after insert" << std::endl;
+            exit(1);
+        }
+    }
+
+    std::cout << "test_skip_list_large_data done" << std::endl;
+}
+
+/**
  * Benchmark the performance of adding key-value pairs to the skip list.
  */
 void benchmark_skip_list_add()
 {
     tendb::skip_list::SkipList skip_list;
-    tendb::allocation::BlockAllocator allocator;
-    tendb::allocation::AllocateFunction allocate = std::bind(&tendb::allocation::BlockAllocator::allocate, &allocator, std::placeholders::_1);
     std::vector<std::string> keys = generate_keys_shuffled(BENCHMARK_NUM_KEYS);
 
     auto t1 = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < keys.size(); i++)
     {
-        // skip_list.put(keys[i], "value_" + std::to_string(i));
-        skip_list.put(keys[i], "value_" + std::to_string(i), allocate);
+        skip_list.put(keys[i], "value_" + std::to_string(i));
     }
     auto t2 = std::chrono::high_resolution_clock::now();
 
@@ -399,6 +428,7 @@ int main()
     test_skip_list_seek();
     test_skip_list_clear();
     test_skip_list_duplicate_keys();
+    test_skip_list_large_data();
 
     test_skip_list_multithread_xwrite();
 

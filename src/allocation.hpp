@@ -192,7 +192,6 @@ namespace tendb::allocation
         char *allocate(size_t requested_size)
         {
             assert(requested_size > 0 && "Allocation size must be greater than zero");
-            assert(requested_size <= BLOCK_SIZE && "Requested size exceeds block size");
 
             Shard *shard = shards.access_at_core(cpu_id);
 

@@ -26,6 +26,7 @@ namespace tendb::skip_list
     private:
         size_t key_size;
         size_t value_size;
+        char flags;
         char buffer[1];
 
         Data(const Data &) = delete;
@@ -126,10 +127,10 @@ namespace tendb::skip_list
         // The index corresponds to the level, with 0 being the bottom level (data level)
         std::array<SkipListNode *, MAX_HEIGHT> heads;
 
-        // Default allocator to manage memory for nodes and data
-        allocation::CoreLocalShardAllocator default_allocator;
-        allocation::AllocateFunction default_allocate = std::bind(&allocation::CoreLocalShardAllocator::allocate, &default_allocator, std::placeholders::_1);
+        // Allocator to manage memory for nodes and data
+        allocation::CoreLocalShardAllocator allocator;
 
+        // Fixed size arena for the head nodes
         allocation::FixedSizeArena head_allocator{MAX_HEIGHT * sizeof(SkipListNode)};
 
     public:
@@ -192,13 +193,7 @@ namespace tendb::skip_list
 
         void put(std::string_view key, std::string_view value)
         {
-            // Use the default allocator to allocate memory for the new Data
-            put(key, value, default_allocate);
-        }
-
-        void put(std::string_view key, std::string_view value, const allocation::AllocateFunction &allocate)
-        {
-            char *memory = allocate(Data::size(key, value));
+            char *memory = allocator.allocate(Data::size(key, value));
             Data *data = new (memory) Data{key, value};
 
             // Find the approximate position to insert the new nodes at each level
@@ -261,7 +256,7 @@ namespace tendb::skip_list
                             return;
                         }
 
-                        char *memory = allocate(sizeof(SkipListNode));
+                        char *memory = allocator.allocate(sizeof(SkipListNode));
                         new_node = new (memory) SkipListNode{data, nullptr, down_node};
 
                         // Try to set the next pointer of the previous node
