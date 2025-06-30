@@ -26,7 +26,6 @@ namespace tendb::skip_list
     private:
         size_t key_size;
         size_t value_size;
-        char flags;
         char buffer[1];
 
         Data(const Data &) = delete;
@@ -191,25 +190,38 @@ namespace tendb::skip_list
             }
         }
 
+        void del(std::string_view key)
+        {
+            assert(false && "Delete operation not implemented yet");
+
+            // Option 1: leave node in data structure, set data pointer to nullptr
+            // Option 2: leave node in data structure, set a tombstone flag in the data structure
+            // Option 3: remove the node from the data structure, and the nodes above it
+
+            // Option 1 is easy to implement, but requires additional checks when reading data
+            // Especially the iterator needs to skip over nodes with nullptr data or tombstone flag
+            // This could be difficult when comparing to end() etc.
+
+            // Option 2 is also easy to implement, but requires additional checks when reading data
+            // Iterators could ignore the tombstone flag, but this implies that delete operations are never observed by iterators
+            // If iterators respect tombstone flags only when advancing to the next node then we achieve a kind of "eventual consistency" model
+
+            // Option 3 is the most complex, but also the most efficient in terms of memory usage
+            // Special care must be taken to ensure consistency during concurrent deletes and inserts
+
+            // Find the approximate path to insert the new node
+            std::array<SkipListNode *, MAX_HEIGHT> path_to_bottom = find_approximate_path(key);
+            // or: find just the bottom node if option 1 or 2 is used
+        }
+
         void put(std::string_view key, std::string_view value)
         {
+            // Allocate memory for the new data
             char *memory = allocator.allocate(Data::size(key, value));
             Data *data = new (memory) Data{key, value};
 
-            // Find the approximate position to insert the new nodes at each level
-            // The actual position can change due to concurrent inserts, which we will handle later
-            std::array<SkipListNode *, MAX_HEIGHT> history;
-            SkipListNode *current = heads[MAX_HEIGHT - 1];
-            for (size_t i = 0; i < MAX_HEIGHT; i++)
-            {
-                SkipListNode *next_node;
-                while ((next_node = current->get_next()) != nullptr && key.compare(next_node->get_data()->key()) >= 0)
-                {
-                    current = next_node;
-                }
-                history[i] = current;
-                current = current->get_down();
-            }
+            // Find the approximate path to insert the new node
+            std::array<SkipListNode *, MAX_HEIGHT> path_to_bottom = find_approximate_path(key);
 
             // Insert the new node at each level from 0 to a random level
             size_t level = random_level();
@@ -217,14 +229,14 @@ namespace tendb::skip_list
 
             for (size_t i = 0; i <= level; ++i)
             {
-                // The history is built in reverse order (top to bottom), so we need to access it from the end (bottom)
-                size_t history_level = MAX_LEVEL - i;
+                // The path is built in reverse order (top to bottom), so we need to access it from the end (bottom)
+                size_t path_index = MAX_LEVEL - i;
 
                 SkipListNode *new_node;
                 bool succeeded = false;
                 while (!succeeded)
                 {
-                    SkipListNode *prev = history[history_level];
+                    SkipListNode *prev = path_to_bottom[path_index];
                     SkipListNode *prev_next = prev->get_next();
 
                     // Check that the new node's key is less than the next node's key
@@ -240,7 +252,7 @@ namespace tendb::skip_list
                         {
                             current = next_node;
                         }
-                        history[history_level] = current;
+                        path_to_bottom[path_index] = current;
                     }
                     else
                     {
@@ -261,7 +273,7 @@ namespace tendb::skip_list
 
                         // Try to set the next pointer of the previous node
                         new_node->override_next(prev_next);
-                        succeeded = history[history_level]->set_next(new_node, prev_next);
+                        succeeded = path_to_bottom[path_index]->set_next(new_node, prev_next);
                     }
                 }
 
@@ -369,6 +381,25 @@ namespace tendb::skip_list
                 level++;
             }
             return level;
+        }
+
+        std::array<SkipListNode *, MAX_HEIGHT> find_approximate_path(std::string_view key) const
+        {
+            // Find the approximate position to insert the new nodes at each level
+            // The actual position can change due to concurrent inserts, which we will handle later
+            std::array<SkipListNode *, MAX_HEIGHT> path_to_bottom;
+            SkipListNode *current = heads[MAX_HEIGHT - 1];
+            SkipListNode *next_node;
+            for (size_t i = 0; i < MAX_HEIGHT; i++)
+            {
+                while ((next_node = current->get_next()) != nullptr && key.compare(next_node->get_data()->key()) >= 0)
+                {
+                    current = next_node;
+                }
+                path_to_bottom[i] = current;
+                current = current->get_down();
+            }
+            return path_to_bottom;
         }
     };
 }
