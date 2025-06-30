@@ -78,7 +78,7 @@ namespace tendb::skip_list
         {
             assert(new_next != nullptr && "Next node cannot be null");
 
-            return next.compare_exchange_strong(prev_expected, new_next, std::memory_order_relaxed);
+            return next.compare_exchange_strong(prev_expected, new_next, std::memory_order_release, std::memory_order_relaxed);
         }
 
         void override_next(SkipListNode *new_next)
@@ -101,7 +101,7 @@ namespace tendb::skip_list
 
         SkipListNode *get_next() const
         {
-            return next.load(std::memory_order_relaxed);
+            return next.load(std::memory_order_acquire);
         }
 
         SkipListNode *get_down() const
