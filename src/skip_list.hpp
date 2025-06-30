@@ -28,22 +28,23 @@ namespace tendb::skip_list
         size_t value_size;
         char buffer[1];
 
-        Data(size_t key_size, size_t value_size) : key_size(key_size), value_size(value_size) {}
-
         Data(const Data &) = delete;
         Data(Data &&) = delete;
         Data &operator=(const Data &) = delete;
         Data &operator=(Data &&) = delete;
 
     public:
-        static Data *create(std::string_view key, std::string_view value, const allocation::AllocateFunction &allocate)
+        Data(std::string_view key, std::string_view value)
+            : key_size(key.size()), value_size(value.size())
         {
-            // Allocate memory for the new Data and initialize it
-            char *memory = allocate(sizeof(Data) + key.size() + value.size() - 1);
-            Data *data = new (memory) Data{key.size(), value.size()};
-            std::memcpy(data->buffer, key.data(), key.size());
-            std::memcpy(data->buffer + key.size(), value.data(), value.size());
-            return data;
+            std::memcpy(buffer, key.data(), key.size());
+            std::memcpy(buffer + key.size(), value.data(), value.size());
+        }
+
+        static size_t size(std::string_view key, std::string_view value)
+        {
+            // Calculate the size needed for the Data structure
+            return sizeof(Data) + key.size() + value.size() - 1;
         }
 
         std::string_view key() const
@@ -65,6 +66,9 @@ namespace tendb::skip_list
         SkipListNode *down;
 
     public:
+        SkipListNode()
+            : data(nullptr), next(nullptr), down(nullptr) {}
+
         SkipListNode(Data *data, SkipListNode *next, SkipListNode *down)
             : data(data), next(next), down(down) {}
 
@@ -80,7 +84,7 @@ namespace tendb::skip_list
             return next.compare_exchange_strong(prev_expected, new_next, std::memory_order_relaxed);
         }
 
-        void override_next(SkipListNode *new_next)
+        void set_next(SkipListNode *new_next)
         {
             next.store(new_next, std::memory_order_relaxed);
         }
@@ -108,6 +112,11 @@ namespace tendb::skip_list
             return down;
         }
 
+        void set_down(SkipListNode *down_node)
+        {
+            down = down_node;
+        }
+
         Data *get_data() const
         {
             return data;
@@ -123,27 +132,20 @@ namespace tendb::skip_list
 
         // Heads of the skip list at each level
         // The index corresponds to the level, with 0 being the bottom level (data level)
-        std::array<SkipListNode *, MAX_HEIGHT> heads;
+        std::array<SkipListNode, MAX_HEIGHT> heads;
 
         // Default allocator to manage memory for nodes and data
         allocation::CoreLocalShardAllocator default_allocator;
         allocation::AllocateFunction default_allocate = std::bind(&allocation::CoreLocalShardAllocator::allocate, &default_allocator, std::placeholders::_1);
-
-        allocation::FixedSizeArena head_allocator{MAX_HEIGHT * sizeof(SkipListNode)};
 
     public:
         SkipList()
         {
             for (std::size_t i = 0; i < MAX_HEIGHT; ++i)
             {
-                char *memory = head_allocator.allocate(sizeof(SkipListNode));
-                if (i == 0)
+                if (i > 0)
                 {
-                    heads[i] = new (memory) SkipListNode{nullptr, nullptr, nullptr};
-                }
-                else
-                {
-                    heads[i] = new (memory) SkipListNode{nullptr, nullptr, heads[i - 1]};
+                    heads[i].set_down(&heads[i - 1]);
                 }
             }
         }
@@ -152,16 +154,18 @@ namespace tendb::skip_list
         SkipList &operator=(const SkipList &) = delete;          // Disallow copy assignment
         SkipList &operator=(SkipList &&other) noexcept = delete; // Disallow move assignment
 
-        SkipList(SkipList &&other) noexcept : heads(std::move(other.heads))
+        SkipList(SkipList &&other) noexcept
         {
-            // Reset the moved-from skip list's heads to nullptr
-            other.heads.fill(nullptr);
-        }
+            // Move the heads from the other skip list
+            for (std::size_t i = 0; i < MAX_HEIGHT; ++i)
+            {
+                heads[i].set_data(other.heads[i].get_data());
+                heads[i].set_down(other.heads[i].get_down());
+                heads[i].set_next(other.heads[i].get_next());
+            }
 
-        ~SkipList()
-        {
-            // Clear the skip list
-            heads.fill(nullptr);
+            // Reset the moved-from skip list's heads to nullptr
+            other.clear();
         }
 
         void clear()
@@ -173,7 +177,7 @@ namespace tendb::skip_list
                 size_t level = MAX_LEVEL - i;
 
                 // Reset the head node at this level
-                heads[level]->clear_next();
+                heads[level].clear_next();
             }
         }
 
@@ -185,12 +189,13 @@ namespace tendb::skip_list
 
         void put(std::string_view key, std::string_view value, const allocation::AllocateFunction &allocate)
         {
-            Data *data = Data::create(key, value, allocate);
+            char *memory = allocate(Data::size(key, value));
+            Data *data = new (memory) Data{key, value};
 
             // Find the approximate position to insert the new nodes at each level
             // The actual position can change due to concurrent inserts, which we will handle later
             std::array<SkipListNode *, MAX_HEIGHT> history;
-            SkipListNode *current = heads[MAX_HEIGHT - 1];
+            SkipListNode *current = &heads[MAX_HEIGHT - 1];
             for (size_t i = 0; i < MAX_HEIGHT; i++)
             {
                 SkipListNode *next_node;
@@ -251,7 +256,7 @@ namespace tendb::skip_list
                         new_node = new (memory) SkipListNode{data, nullptr, down_node};
 
                         // Try to set the next pointer of the previous node
-                        new_node->override_next(prev_next);
+                        new_node->set_next(prev_next);
                         succeeded = history[history_level]->set_next(new_node, prev_next);
                     }
                 }
@@ -263,14 +268,14 @@ namespace tendb::skip_list
 
         bool is_empty() const
         {
-            return heads[0]->get_next() == nullptr;
+            return heads[0].get_next() == nullptr;
         }
 
         struct Iterator
         {
-            SkipListNode *current;
+            const SkipListNode *current;
 
-            Iterator(SkipListNode *node) : current(node) {}
+            Iterator(const SkipListNode *node) : current(node) {}
 
             bool operator!=(const Iterator &other) const
             {
@@ -304,7 +309,7 @@ namespace tendb::skip_list
 
         Iterator begin() const
         {
-            return Iterator(heads[0]->get_next());
+            return Iterator(heads[0].get_next());
         }
 
         Iterator end() const
@@ -314,7 +319,7 @@ namespace tendb::skip_list
 
         Iterator seek(std::string_view key) const
         {
-            SkipListNode *current = heads[MAX_HEIGHT - 1];
+            const SkipListNode *current = &heads[MAX_HEIGHT - 1];
 
             // Traverse the skip list from the top level down to the bottom
             for (size_t i = 0; i < MAX_HEIGHT; i++)

@@ -11,6 +11,8 @@
 #include "allocation.hpp"
 #include "skip_list.hpp"
 
+constexpr static size_t BENCHMARK_NUM_KEYS = 100000;
+
 void generate_keys_sequence(uint64_t count, std::vector<std::string> &keys)
 {
     for (uint64_t i = 0; i < count; i++)
@@ -196,7 +198,7 @@ void benchmark_skip_list_add()
     tendb::skip_list::SkipList skip_list;
     tendb::allocation::BlockAllocator allocator;
     tendb::allocation::AllocateFunction allocate = std::bind(&tendb::allocation::BlockAllocator::allocate, &allocator, std::placeholders::_1);
-    std::vector<std::string> keys = generate_keys_shuffled(100000);
+    std::vector<std::string> keys = generate_keys_shuffled(BENCHMARK_NUM_KEYS);
 
     auto t1 = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < keys.size(); i++)
@@ -216,7 +218,7 @@ void benchmark_skip_list_add()
 void benchmark_skip_list_add_multithreaded()
 {
     constexpr static size_t num_threads = 12;
-    std::vector<std::string> keys = generate_keys_shuffled(100000);
+    std::vector<std::string> keys = generate_keys_shuffled(BENCHMARK_NUM_KEYS);
 
     tendb::skip_list::SkipList skip_list;
 
@@ -250,12 +252,13 @@ void benchmark_skip_list_add_multithreaded()
  */
 void benchmark_map_add()
 {
+    std::vector<std::string> keys = generate_keys_shuffled(BENCHMARK_NUM_KEYS);
     std::map<std::string, std::string> map;
 
     auto t1 = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < 100000; i++)
+    for (int i = 0; i < BENCHMARK_NUM_KEYS; i++)
     {
-        map.insert({"key_" + std::to_string(i), "value_" + std::to_string(i)});
+        map.insert({keys[i], "value_" + std::to_string(i)});
     }
     auto t2 = std::chrono::high_resolution_clock::now();
 
