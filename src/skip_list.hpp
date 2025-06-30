@@ -200,7 +200,7 @@ namespace tendb::skip_list
 
             // Option 1 is easy to implement, but requires additional checks when reading data
             // Especially the iterator needs to skip over nodes with nullptr data
-            // This could be difficult when comparing iterators (e.g. to end()) because skipping over nullptr data nodes would have to be done implicitly
+            // This could be difficult when comparing iterators (e.g. to end()) because skipping over nullptr data nodes would have to be done implicitly on each comparison
 
             // Option 2 is also easy to implement, but requires additional checks when reading data
             // Iterators could ignore the tombstone flag, but this implies that delete operations are never observed by iterators
