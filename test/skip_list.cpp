@@ -252,6 +252,14 @@ void test_skip_list_delete()
             std::cerr << "Error: key should not be found after delete: " << key << std::endl;
             exit(1);
         }
+
+        skip_list.put(key, "new_value");
+        it = skip_list.seek(key);
+        if (it == skip_list.end())
+        {
+            std::cerr << "Error: key should be found after re-insert: " << key << std::endl;
+            exit(1);
+        }
     }
 
     std::cout << "test_skip_list_delete done" << std::endl;
