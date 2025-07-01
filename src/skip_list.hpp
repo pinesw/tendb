@@ -21,6 +21,9 @@ namespace tendb::skip_list
     static thread_local std::mt19937_64 rng{std::random_device{}()}; // Initialize thread-local RNG with a random seed
     static thread_local std::uniform_real_distribution<double> dist{0.0, 1.0};
 
+    /**
+     * Data structure to hold key-value pairs in the skip list.
+     */
     struct Data
     {
     private:
@@ -28,15 +31,21 @@ namespace tendb::skip_list
 
         size_t key_size;
         size_t value_size;
-        char flags;
-        char buffer[1];
+        char flags;     // Flags for the data, currently only used for deletion
+        char buffer[1]; // Placeholder for the key and value data at the end of the structure, to be allocated by the caller of the constructor
 
+        // Disallow copy and move operations
         Data(const Data &) = delete;
         Data(Data &&) = delete;
         Data &operator=(const Data &) = delete;
         Data &operator=(Data &&) = delete;
 
     public:
+        /**
+         * Constructor to initialize the Data structure with a key and value.
+         * The caller must ensure that the bytes allocated for this object are sufficient to hold the key and value.
+         * To get the size needed for the Data structure, use the static Data::size method.
+         */
         Data(std::string_view key, std::string_view value)
             : key_size(key.size()), value_size(value.size()), flags(0)
         {
@@ -44,6 +53,9 @@ namespace tendb::skip_list
             std::memcpy(buffer + key.size(), value.data(), value.size());
         }
 
+        /**
+         * Static method to calculate the size needed for the Data structure given a key and value.
+         */
         static size_t size(std::string_view key, std::string_view value)
         {
             // Calculate the size needed for the Data structure
@@ -60,33 +72,49 @@ namespace tendb::skip_list
             return std::string_view(buffer + key_size, value_size);
         }
 
+        /**
+         * Check if the data is marked as deleted.
+         * When the data of a node is marked as deleted, it is not considered part of the skip list anymore.
+         */
         bool is_deleted() const
         {
             return (flags & FLAG_DELETED) != 0;
         }
 
+        /**
+         * Mark the data as deleted.
+         */
         void mark_deleted()
         {
             flags |= FLAG_DELETED;
         }
     };
 
+    /**
+     * Node structure for the skip list.
+     * Each node contains a pointer to the data, a pointer to the next node at the same level, and a pointer to the node below it (if any).
+     */
     struct alignas(alignof(std::max_align_t)) SkipListNode
     {
     private:
-        Data *data;
-        std::atomic<SkipListNode *> next;
-        SkipListNode *down;
+        Data *data;                       // Does not need to be atomic, because concurrent operations are allowed to race to set the data pointer
+        std::atomic<SkipListNode *> next; // Wrapped in atomic for lock-free updates
+        SkipListNode *down;               // Once part of the skip list, the down pointer is never changed, so it does not need to be atomic either
 
     public:
         SkipListNode(Data *data, SkipListNode *next, SkipListNode *down)
             : data(data), next(next), down(down) {}
 
-        SkipListNode(const SkipListNode &) = delete;            // Disallow copy construction
-        SkipListNode &operator=(const SkipListNode &) = delete; // Disallow copy assignment
-        SkipListNode(SkipListNode &&) = delete;                 // Disallow move construction
-        SkipListNode &operator=(SkipListNode &&) = delete;      // Disallow move assignment
+        // Disallow copy and move operations
+        SkipListNode(const SkipListNode &) = delete;
+        SkipListNode &operator=(const SkipListNode &) = delete;
+        SkipListNode(SkipListNode &&) = delete;
+        SkipListNode &operator=(SkipListNode &&) = delete;
 
+        /**
+         * Set the next pointer of this node to a new node.
+         * This method uses compare-and-exchange to ensure that concurrent insertions can correctly set the next pointer without loss of data.
+         */
         bool set_next(SkipListNode *new_next, SkipListNode *prev_expected)
         {
             assert(new_next != nullptr && "Next node cannot be null");
@@ -94,6 +122,10 @@ namespace tendb::skip_list
             return next.compare_exchange_strong(prev_expected, new_next, std::memory_order_relaxed);
         }
 
+        /**
+         * Override the next pointer of this node without checking the previous value.
+         * Use this method only when the node is guaranteed to not have any concurrent modifications.
+         */
         void override_next(SkipListNode *new_next)
         {
             next.store(new_next, std::memory_order_relaxed);
@@ -107,8 +139,13 @@ namespace tendb::skip_list
             data = data_ptr;
         }
 
+        /**
+         * Clear the next pointer of this node.
+         *
+         */
         void clear_next()
         {
+            // Since clearing the skip list is not a concurrent operation, we don't need to CAS the next pointer
             next.store(nullptr, std::memory_order_relaxed);
         }
 
@@ -128,18 +165,26 @@ namespace tendb::skip_list
         }
     };
 
+    /**
+     * Skip list data structure for storing key-value pairs, sorted by keys.
+     * Inserting the same key multiple times will update the value, rather than creating duplicate entries.
+     * Supports concurrent insertion, deletion and reading.
+     * Creating and destroying (clearing) the skip list is not thread-safe.
+     * Memory allocated during the lifetime of the skip list is not freed until the skip list is destroyed.
+     */
     struct SkipList
     {
     private:
-        constexpr static std::size_t MAX_HEIGHT = 16;
-        constexpr static std::size_t MAX_LEVEL = MAX_HEIGHT - 1;
-        constexpr static std::double_t BRANCH_PROBABILITY = 0.5;
+        constexpr static std::size_t MAX_HEIGHT = 16;            // The number of levels in the skip list
+        constexpr static std::size_t MAX_LEVEL = MAX_HEIGHT - 1; // The maximum (top) level index, where level 0 is the bottom level (data level)
+        constexpr static std::double_t BRANCH_PROBABILITY = 0.5; // The probability of branching to the next level when inserting a new node
 
         // Heads of the skip list at each level
-        // The index corresponds to the level, with 0 being the bottom level (data level)
+        // The index corresponds to the level, with 0 being the bottom level
         std::array<SkipListNode *, MAX_HEIGHT> heads;
 
         // Allocator to manage memory for nodes and data
+        // Using the CoreLocalShardAllocator gives performant multi-threaded allocations
         allocation::CoreLocalShardAllocator allocator;
 
         // Fixed size arena for the head nodes
@@ -148,6 +193,9 @@ namespace tendb::skip_list
     public:
         SkipList()
         {
+            // Initialize the heads of the skip list
+            // All head nodes point down to the next level, except for the bottom level (level 0)
+
             for (std::size_t i = 0; i < MAX_HEIGHT; ++i)
             {
                 char *memory = head_allocator.allocate(sizeof(SkipListNode));
@@ -165,6 +213,10 @@ namespace tendb::skip_list
         SkipList(const SkipList &) = delete;            // Disallow copy construction
         SkipList &operator=(const SkipList &) = delete; // Disallow copy assignment
 
+        /**
+         * Move constructor for SkipList.
+         * Not thread-safe: do not use this constructor while other operations on the skip list are in progress.
+         */
         SkipList(SkipList &&other) noexcept
         {
             if (this != &other)
@@ -174,6 +226,10 @@ namespace tendb::skip_list
             }
         }
 
+        /**
+         * Move assignment operator for SkipList.
+         * Not thread-safe: do not use this operator while other operations on the skip list are in progress.
+         */
         SkipList &operator=(SkipList &&other) noexcept
         {
             if (this != &other)
@@ -184,12 +240,19 @@ namespace tendb::skip_list
             return *this;
         }
 
+        /**
+         * Not thread-safe: before the skip list is destroyed, the caller has to ensure that all other operations on the skip list are finished.
+         */
         ~SkipList()
         {
-            // Clear the skip list
+            // Make the skip list unusable by clearing the heads
             heads.fill(nullptr);
         }
 
+        /**
+         * Clear the skip list.
+         * Not thread-safe: before clearing the skip list, the caller has to ensure that all other operations on the skip list are finished.
+         */
         void clear()
         {
             for (std::size_t i = 0; i < MAX_HEIGHT; ++i)
@@ -203,30 +266,23 @@ namespace tendb::skip_list
             }
         }
 
+        /**
+         * Delete a key from the skip list.
+         * Iterators that are currently at the deleted key will still be able to read the data.
+         * Thread-safe: this method can be called concurrently with other thread-safe operations on the skip list.
+         */
         void del(std::string_view key)
         {
-            // Option 1: leave node in data structure, set data pointer to nullptr
-            // Option 2: leave node in data structure, set a tombstone flag in the data structure
-            // Option 3: remove the node from the data structure, and the nodes above it
-
-            // Option 1 is easy to implement, but requires additional checks when reading data
-            // Especially the iterator needs to skip over nodes with nullptr data
-            // This could be difficult when comparing iterators (e.g. to end()) because skipping over nullptr data nodes would have to be done implicitly on each comparison
-
-            // Option 2 is also easy to implement, but requires additional checks when reading data
-            // Iterators could ignore the tombstone flag, but this implies that delete operations are never observed by iterators
-            // If iterators respect tombstone flags only when advancing to the next node then we achieve a kind of "eventual consistency" model
-
-            // Option 3 is the most complex, but also the most efficient in terms of memory usage
-            // Special care must be taken to ensure consistency during concurrent deletes and inserts
-
-            // Implementation of option 2:
-
             const SkipListNode *current = find_node(key);
             Data *data = current->get_data();
             data->mark_deleted();
         }
 
+        /**
+         * Insert a key-value pair into the skip list.
+         * If the key already exists, the value is updated.
+         * Thread-safe: this method can be called concurrently with other thread-safe operations on the skip list.
+         */
         void put(std::string_view key, std::string_view value)
         {
             // Allocate memory for the new data
@@ -295,11 +351,17 @@ namespace tendb::skip_list
             }
         }
 
+        /**
+         * Check if the skip list is empty.
+         */
         bool is_empty() const
         {
-            return heads[0]->get_next() == nullptr;
+            return heads[0] == nullptr || heads[0]->get_next() == nullptr;
         }
 
+        /**
+         * Iterator for the skip list.
+         */
         struct Iterator
         {
             const SkipListNode *current;
@@ -316,6 +378,12 @@ namespace tendb::skip_list
                 return current == other.current;
             }
 
+            /**
+             * Increment the iterator to the next valid node.
+             * This skips over deleted nodes.
+             * If the current node is deleted after incrementing, the deleted data will remain accessible.
+             * Thread-safe: this method can be called concurrently with other thread-safe operations on the skip list.
+             */
             Iterator &operator++()
             {
                 if (current != nullptr)
@@ -341,16 +409,30 @@ namespace tendb::skip_list
             }
         };
 
+        /**
+         * Return an iterator to the beginning of the skip list.
+         * Thread-safe: this method can be called concurrently with other thread-safe operations on the skip list.
+         */
         Iterator begin() const
         {
             return Iterator(heads[0]->get_next());
         }
 
+        /**
+         * Return an iterator to the end of the skip list.
+         * Thread-safe: this method can be called concurrently with other thread-safe operations on the skip list.
+         */
         Iterator end() const
         {
             return Iterator(nullptr);
         }
 
+        /**
+         * Seek for a key in the skip list.
+         * Returns an iterator to the node with the given key if it exists and is not deleted.
+         * Otherwise, returns an iterator to the end of the skip list.
+         * Thread-safe: this method can be called concurrently with other thread-safe operations on the skip list.
+         */
         Iterator seek(std::string_view key) const
         {
             const SkipListNode *current = find_node(key);
@@ -363,6 +445,10 @@ namespace tendb::skip_list
             return end();
         }
 
+        /**
+         * Get the value associated with a key in the skip list.
+         * Thread-safe: this method can be called concurrently with other thread-safe operations on the skip list.
+         */
         std::optional<std::string_view> get(std::string_view key) const
         {
             auto it = seek(key);
@@ -374,16 +460,22 @@ namespace tendb::skip_list
         }
 
     private:
+        /**
+         * Generate a random level for the new node.
+         */
         size_t random_level()
         {
             size_t level = 0;
-            while (dist(rng) < BRANCH_PROBABILITY && level < MAX_LEVEL)
+            while (level < MAX_LEVEL && dist(rng) < BRANCH_PROBABILITY)
             {
                 level++;
             }
             return level;
         }
 
+        /**
+         * Find the node with the given key in the skip list.
+         */
         const SkipListNode *find_node(std::string_view key) const
         {
             // Traverse the skip list from the top level down to the bottom
@@ -407,6 +499,12 @@ namespace tendb::skip_list
             return current;
         }
 
+        /**
+         * Find the approximate path to a node with the given key in the skip list.
+         * The path is an array of nodes at each level, starting from the top level down to the bottom.
+         * At each level of the path, the node is the last node that has a key less than the target key.
+         * The path is considered "approximate", because during concurrent inserts, the actual path may change.
+         */
         std::array<SkipListNode *, MAX_HEIGHT> find_approximate_path(std::string_view key) const
         {
             // Find the approximate position to insert the new nodes at each level
