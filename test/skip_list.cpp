@@ -223,6 +223,41 @@ void test_skip_list_large_data()
 }
 
 /**
+ * Test that the skip list can delete keys.
+ */
+void test_skip_list_delete()
+{
+    tendb::skip_list::SkipList skip_list;
+    std::vector<std::string> keys = generate_keys_shuffled();
+
+    for (const auto &key : keys)
+    {
+        skip_list.put(key, "value");
+    }
+
+    for (const auto &key : keys)
+    {
+        auto it = skip_list.seek(key);
+        if (it == skip_list.end())
+        {
+            std::cerr << "Error: key should be found before delete: " << key << std::endl;
+            exit(1);
+        }
+
+        skip_list.del(key);
+
+        it = skip_list.seek(key);
+        if (it != skip_list.end())
+        {
+            std::cerr << "Error: key should not be found after delete: " << key << std::endl;
+            exit(1);
+        }
+    }
+
+    std::cout << "test_skip_list_delete done" << std::endl;
+}
+
+/**
  * Benchmark the performance of adding key-value pairs to the skip list.
  */
 void benchmark_skip_list_add()
@@ -429,6 +464,7 @@ int main()
     test_skip_list_clear();
     test_skip_list_duplicate_keys();
     test_skip_list_large_data();
+    test_skip_list_delete();
 
     test_skip_list_multithread_xwrite();
 
