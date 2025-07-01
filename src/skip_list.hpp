@@ -13,10 +13,6 @@
 
 namespace tendb::skip_list
 {
-    // TODO: consider:
-    // Remove value from skip list nodes, keep in a separate data structure (possibly also backed by custom allocator)
-    // In fact, remove value from skip list entirely? Eventually we just need a pointer to some value data...
-
     // RNG for random level generation
     static thread_local std::mt19937_64 rng{std::random_device{}()}; // Initialize thread-local RNG with a random seed
     static thread_local std::uniform_real_distribution<double> dist{0.0, 1.0};
