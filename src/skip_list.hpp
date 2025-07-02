@@ -183,9 +183,6 @@ namespace tendb::skip_list
         // Using the CoreLocalShardAllocator gives performant multi-threaded allocations
         allocation::CoreLocalShardAllocator allocator;
 
-        // Fixed size arena for the head nodes
-        allocation::FixedSizeArena head_allocator{MAX_HEIGHT * sizeof(SkipListNode)};
-
     public:
         SkipList()
         {
@@ -194,7 +191,7 @@ namespace tendb::skip_list
 
             for (std::size_t i = 0; i < MAX_HEIGHT; ++i)
             {
-                char *memory = head_allocator.allocate(sizeof(SkipListNode));
+                char *memory = allocator.allocate(sizeof(SkipListNode));
                 if (i == 0)
                 {
                     heads[i] = new (memory) SkipListNode{nullptr, nullptr, nullptr};
