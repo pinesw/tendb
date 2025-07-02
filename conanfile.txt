@@ -1,0 +1,6 @@
+[requires]
+tracy/0.12.1
+
+[generators]
+CMakeDeps
+CMakeToolchain

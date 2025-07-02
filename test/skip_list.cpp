@@ -8,6 +8,9 @@
 #include <thread>
 #include <vector>
 
+#include <tracy/tracy/Tracy.hpp>
+// #define ZoneScoped
+
 #include "skip_list.hpp"
 
 constexpr static size_t BENCHMARK_NUM_KEYS = 100000;
@@ -299,6 +302,8 @@ void benchmark_map_add()
  */
 void benchmark_skip_list_add()
 {
+    ZoneScoped;
+
     tendb::skip_list::SkipList skip_list;
     std::vector<std::string> keys = generate_keys_shuffled(BENCHMARK_NUM_KEYS);
 
@@ -318,6 +323,8 @@ void benchmark_skip_list_add()
  */
 void benchmark_skip_list_add_multithreaded()
 {
+    ZoneScoped;
+
     std::vector<std::string> keys = generate_keys_shuffled(BENCHMARK_NUM_KEYS);
     tendb::skip_list::SkipList skip_list;
 
@@ -552,24 +559,26 @@ void multithread_xreadwrite_test_skip_list()
 
 int main()
 {
-    test_skip_list_ordered();
-    test_skip_list_seek();
-    test_skip_list_clear();
-    test_skip_list_duplicate_keys();
-    test_skip_list_large_data();
-    test_skip_list_delete();
+    // test_skip_list_ordered();
+    // test_skip_list_seek();
+    // test_skip_list_clear();
+    // test_skip_list_duplicate_keys();
+    // test_skip_list_large_data();
+    // test_skip_list_delete();
 
-    test_skip_list_multithread_xwrite();
+    // test_skip_list_multithread_xwrite();
 
     // multithread_xreadwrite_test_skip_list(); // test to verify concurrent read/write operations
 
-    benchmark_map_add();
+    // benchmark_map_add();
     benchmark_skip_list_add();
-    benchmark_skip_list_add_multithreaded();
+    // benchmark_skip_list_add_multithreaded();
 
-    benchmark_map_read();
-    benchmark_skip_list_read();
-    benchmark_skip_list_read_multithreaded();
+    // benchmark_map_read();
+    // benchmark_skip_list_read();
+    // benchmark_skip_list_read_multithreaded();
+
+    std::this_thread::sleep_for(std::chrono::seconds(1)); // Give time for Tracy to flush any remaining data
 
     return 0;
 }

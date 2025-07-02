@@ -23,11 +23,12 @@ namespace tendb::skip_list
     struct Data
     {
     private:
-        constexpr static char FLAG_DELETED = 0x01; // Tombstone flag for deleted nodes
+        constexpr static size_t FLAG_DELETED = 0x0000000000000001; // Tombstone flag for deleted nodes
 
         size_t key_size;
+        size_t key_size_padded;
         size_t value_size;
-        char flags;     // Flags for the data, currently only used for deletion
+        size_t flags;   // Flags for the data, currently only used for deletion
         char buffer[1]; // Placeholder for the key and value data at the end of the structure, to be allocated by the caller of the constructor
 
         // Disallow copy and move operations
@@ -45,8 +46,12 @@ namespace tendb::skip_list
         Data(std::string_view key, std::string_view value)
             : key_size(key.size()), value_size(value.size()), flags(0)
         {
+            std::cout << offsetof(Data, key_size) << " " << offsetof(Data, value_size) << " " << offsetof(Data, flags) << " " << offsetof(Data, buffer) << std::endl;
+
+            size_t padding = -key.size() & (256 - 1);
+            key_size_padded = key.size() + padding;
             std::memcpy(buffer, key.data(), key.size());
-            std::memcpy(buffer + key.size(), value.data(), value.size());
+            std::memcpy(buffer + key_size_padded, value.data(), value.size());
         }
 
         /**
@@ -55,7 +60,8 @@ namespace tendb::skip_list
         static size_t size(std::string_view key, std::string_view value)
         {
             // Calculate the size needed for the Data structure
-            return sizeof(Data) + key.size() + value.size() - 1;
+            size_t padding = -key.size() & (256 - 1);
+            return sizeof(Data) - 1 + key.size() + padding + value.size();
         }
 
         std::string_view key() const
@@ -65,7 +71,7 @@ namespace tendb::skip_list
 
         std::string_view value() const
         {
-            return std::string_view(buffer + key_size, value_size);
+            return std::string_view(buffer + key_size_padded, value_size);
         }
 
         /**
@@ -266,6 +272,8 @@ namespace tendb::skip_list
          */
         void del(std::string_view key)
         {
+            ZoneScoped;
+
             const SkipListNode *current = find_node(key);
             Data *data = current->get_data();
             data->mark_deleted();
@@ -278,6 +286,8 @@ namespace tendb::skip_list
          */
         void put(std::string_view key, std::string_view value)
         {
+            ZoneScoped;
+
             // Allocate memory for the new data
             char *memory = allocator.allocate(Data::size(key, value));
             Data *data = new (memory) Data{key, value};
@@ -428,6 +438,8 @@ namespace tendb::skip_list
          */
         Iterator seek(std::string_view key) const
         {
+            ZoneScoped;
+
             const SkipListNode *current = find_node(key);
             Data *data = current->get_data();
             if (data != nullptr && !data->is_deleted() && key.compare(data->key()) == 0)
@@ -444,6 +456,8 @@ namespace tendb::skip_list
          */
         std::optional<std::string_view> get(std::string_view key) const
         {
+            ZoneScoped;
+
             auto it = seek(key);
             if (it != end())
             {
@@ -471,6 +485,8 @@ namespace tendb::skip_list
          */
         const SkipListNode *find_node(std::string_view key) const
         {
+            ZoneScoped;
+
             // Traverse the skip list from the top level down to the bottom
             const SkipListNode *current = heads[MAX_LEVEL];
             for (size_t i = 0; i < MAX_HEIGHT; i++)
@@ -500,6 +516,8 @@ namespace tendb::skip_list
          */
         std::array<SkipListNode *, MAX_HEIGHT> find_approximate_path(std::string_view key) const
         {
+            ZoneScoped;
+
             // Find the approximate position to insert the new nodes at each level
             // The actual position can change due to concurrent inserts, which we will handle later
             std::array<SkipListNode *, MAX_HEIGHT> path_to_bottom;
@@ -507,7 +525,10 @@ namespace tendb::skip_list
             SkipListNode *next_node;
             for (size_t i = 0; i < MAX_HEIGHT; i++)
             {
-                while ((next_node = current->get_next()) != nullptr && key.compare(next_node->get_data()->key()) >= 0)
+                ZoneScoped;
+
+                while (key_is_after_node(key, next_node = current->get_next()))
+                // while ((next_node = current->get_next()) != nullptr && key.compare(next_node->get_data()->key()) >= 0)
                 {
                     current = next_node;
                 }
@@ -515,6 +536,21 @@ namespace tendb::skip_list
                 current = current->get_down();
             }
             return path_to_bottom;
+        }
+
+        static bool key_is_after_node(std::string_view key, const SkipListNode *node)
+        {
+            ZoneScoped;
+
+            // if (node == nullptr)
+            // {
+            //     return false;
+            // }
+
+            // const char *a = key.data();
+            // const char *b = node->get_data()->key().data();
+
+            return node != nullptr && key.compare(node->get_data()->key()) >= 0;
         }
     };
 }

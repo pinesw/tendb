@@ -60,6 +60,8 @@ namespace tendb::allocation
 
         char *new_block(size_t size)
         {
+            ZoneScoped;
+
             assert(size > 0 && "Allocation size must be greater than zero");
 
             char *block = new char[size];
@@ -69,6 +71,8 @@ namespace tendb::allocation
 
         char *allocate_small(size_t requested_size)
         {
+            ZoneScoped;
+
             assert(requested_size > 0 && "Allocation size must be greater than zero");
             assert(requested_size <= BLOCK_SIZE && "Allocation size exceeds block size");
 
@@ -91,6 +95,8 @@ namespace tendb::allocation
     public:
         char *allocate(size_t requested_size)
         {
+            ZoneScoped;
+
             assert(requested_size > 0 && "Allocation size must be greater than zero");
 
             if (is_large_allocation(requested_size))
@@ -120,6 +126,8 @@ namespace tendb::allocation
     public:
         char *allocate(size_t requested_size)
         {
+            ZoneScoped;
+
             assert(requested_size > 0 && "Allocation size must be greater than zero");
 
             Shard *shard = shards.access_at_core(cpu_id);
