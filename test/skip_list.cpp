@@ -570,13 +570,13 @@ int main()
 
     // multithread_xreadwrite_test_skip_list(); // test to verify concurrent read/write operations
 
-    // benchmark_map_add();
-    // benchmark_skip_list_add();
-    // benchmark_skip_list_add_multithreaded();
+    benchmark_map_add();
+    benchmark_skip_list_add();
+    benchmark_skip_list_add_multithreaded();
 
-    // benchmark_map_read();
-    // benchmark_skip_list_read();
-    // benchmark_skip_list_read_multithreaded();
+    benchmark_map_read();
+    benchmark_skip_list_read();
+    benchmark_skip_list_read_multithreaded();
 
     std::this_thread::sleep_for(std::chrono::seconds(1)); // Give time for Tracy to flush any remaining data
 

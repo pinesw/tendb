@@ -528,7 +528,6 @@ namespace tendb::skip_list
                 ZoneScoped;
 
                 while (key_is_after_node(key, next_node = current->get_next()))
-                // while ((next_node = current->get_next()) != nullptr && key.compare(next_node->get_data()->key()) >= 0)
                 {
                     current = next_node;
                 }
@@ -542,38 +541,7 @@ namespace tendb::skip_list
         {
             ZoneScoped;
 
-            // TODO: benchmark this function and use it in other places where we compare keys
-
-            if (node == nullptr)
-            {
-                return false;
-            }
-
-            // return node != nullptr && key.compare(node->get_data()->key()) >= 0;
-
-            const char *a = key.data();
-            const char *b = node->get_data()->key().data();
-            size_t min_length = std::min(key.size(), node->get_data()->key().size());
-
-            // Compare 32-byte chunks
-            for (size_t i = 0; i < min_length; i += 32)
-            {
-                __m256i av = *reinterpret_cast<const __m256i *>(a + i);
-                __m256i bv = *reinterpret_cast<const __m256i *>(b + i);
-
-                __m256i cmp_gt = _mm256_cmpgt_epi8(av, bv);
-                __m256i cmp_eq = _mm256_cmpeq_epi8(av, bv);
-                __m256i cmp_xor = _mm256_xor_si256(cmp_gt, cmp_eq);
-                uint32_t mask = _mm256_movemask_epi8(cmp_xor);
-                int index = std::countr_one(mask);
-
-                if (index + i < min_length && index != 32)
-                {
-                    return false;
-                }
-            }
-
-            return key.size() > node->get_data()->key().size();
+            return node != nullptr && key.compare(node->get_data()->key()) >= 0;
         }
     };
 }
