@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cassert>
 #include <cstring>
+#include <immintrin.h>
 #include <iostream>
 #include <optional>
 #include <random>
@@ -46,11 +47,10 @@ namespace tendb::skip_list
         Data(std::string_view key, std::string_view value)
             : key_size(key.size()), value_size(value.size()), flags(0)
         {
-            std::cout << offsetof(Data, key_size) << " " << offsetof(Data, value_size) << " " << offsetof(Data, flags) << " " << offsetof(Data, buffer) << std::endl;
-
-            size_t padding = -key.size() & (256 - 1);
+            size_t padding = -key.size() & (32 - 1);
             key_size_padded = key.size() + padding;
             std::memcpy(buffer, key.data(), key.size());
+            std::memset(buffer + key.size(), 0, padding);
             std::memcpy(buffer + key_size_padded, value.data(), value.size());
         }
 
@@ -60,7 +60,7 @@ namespace tendb::skip_list
         static size_t size(std::string_view key, std::string_view value)
         {
             // Calculate the size needed for the Data structure
-            size_t padding = -key.size() & (256 - 1);
+            size_t padding = -key.size() & (32 - 1);
             return sizeof(Data) - 1 + key.size() + padding + value.size();
         }
 
@@ -293,7 +293,7 @@ namespace tendb::skip_list
             Data *data = new (memory) Data{key, value};
 
             // Find the approximate path to insert the new node
-            std::array<SkipListNode *, MAX_HEIGHT> path_to_bottom = find_approximate_path(key);
+            std::array<SkipListNode *, MAX_HEIGHT> path_to_bottom = find_approximate_path(data->key());
 
             // Insert the new node at each level from 0 to a random level
             size_t level = random_level();
@@ -542,15 +542,38 @@ namespace tendb::skip_list
         {
             ZoneScoped;
 
-            // if (node == nullptr)
-            // {
-            //     return false;
-            // }
+            // TODO: benchmark this function and use it in other places where we compare keys
 
-            // const char *a = key.data();
-            // const char *b = node->get_data()->key().data();
+            if (node == nullptr)
+            {
+                return false;
+            }
 
-            return node != nullptr && key.compare(node->get_data()->key()) >= 0;
+            // return node != nullptr && key.compare(node->get_data()->key()) >= 0;
+
+            const char *a = key.data();
+            const char *b = node->get_data()->key().data();
+            size_t min_length = std::min(key.size(), node->get_data()->key().size());
+
+            // Compare 32-byte chunks
+            for (size_t i = 0; i < min_length; i += 32)
+            {
+                __m256i av = *reinterpret_cast<const __m256i *>(a + i);
+                __m256i bv = *reinterpret_cast<const __m256i *>(b + i);
+
+                __m256i cmp_gt = _mm256_cmpgt_epi8(av, bv);
+                __m256i cmp_eq = _mm256_cmpeq_epi8(av, bv);
+                __m256i cmp_xor = _mm256_xor_si256(cmp_gt, cmp_eq);
+                uint32_t mask = _mm256_movemask_epi8(cmp_xor);
+                int index = std::countr_one(mask);
+
+                if (index + i < min_length && index != 32)
+                {
+                    return false;
+                }
+            }
+
+            return key.size() > node->get_data()->key().size();
         }
     };
 }

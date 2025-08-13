@@ -11,11 +11,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_FIND_PACKAGE_PREFER_CONFIG TRUE)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/build")
 list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/build")
-find_package(Tracy REQUIRED)
+# find_package(Tracy REQUIRED)
 
 # Add include directories
 include_directories(src)
 
 # add_library(tendb tendb.cpp)
 add_executable(${PROJECT_NAME} test/skip_list.cpp)
-target_link_libraries(${PROJECT_NAME} Tracy::TracyClient)
+# target_link_libraries(${PROJECT_NAME} Tracy::TracyClient)

@@ -8,8 +8,8 @@
 #include <thread>
 #include <vector>
 
-#include <tracy/tracy/Tracy.hpp>
-// #define ZoneScoped
+// #include <tracy/tracy/Tracy.hpp>
+#define ZoneScoped
 
 #include "skip_list.hpp"
 
@@ -559,19 +559,19 @@ void multithread_xreadwrite_test_skip_list()
 
 int main()
 {
-    // test_skip_list_ordered();
-    // test_skip_list_seek();
-    // test_skip_list_clear();
-    // test_skip_list_duplicate_keys();
-    // test_skip_list_large_data();
-    // test_skip_list_delete();
+    test_skip_list_ordered();
+    test_skip_list_seek();
+    test_skip_list_clear();
+    test_skip_list_duplicate_keys();
+    test_skip_list_large_data();
+    test_skip_list_delete();
 
-    // test_skip_list_multithread_xwrite();
+    test_skip_list_multithread_xwrite();
 
     // multithread_xreadwrite_test_skip_list(); // test to verify concurrent read/write operations
 
     // benchmark_map_add();
-    benchmark_skip_list_add();
+    // benchmark_skip_list_add();
     // benchmark_skip_list_add_multithreaded();
 
     // benchmark_map_read();
