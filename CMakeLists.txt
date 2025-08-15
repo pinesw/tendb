@@ -16,6 +16,10 @@ list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/build")
 # Add include directories
 include_directories(src)
 
+find_package(boost REQUIRED)
+
 # add_library(tendb tendb.cpp)
-add_executable(${PROJECT_NAME} test/skip_list.cpp)
+add_executable(${PROJECT_NAME} test/db.cpp)
+# add_executable(${PROJECT_NAME} test/skip_list.cpp)
 # target_link_libraries(${PROJECT_NAME} Tracy::TracyClient)
+target_link_libraries(${PROJECT_NAME} boost::boost)

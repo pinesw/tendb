@@ -11,6 +11,16 @@ namespace tendb::port
     {
         return GetCurrentProcessorNumber();
     }
+
+    uint32_t get_current_process_id()
+    {
+        return GetCurrentProcessId();
+    }
+
+    uint32_t get_current_thread_id()
+    {
+        return GetCurrentThreadId();
+    }
 }
 
 #else
@@ -31,6 +41,16 @@ namespace tendb::port
 #else
         return -1;
 #endif
+    }
+
+    uint32_t get_current_process_id()
+    {
+        return static_cast<uint32_t>(getpid());
+    }
+
+    uint32_t get_current_thread_id()
+    {
+        return static_cast<uint32_t>(gettid());
     }
 }
 

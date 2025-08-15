@@ -1,6 +1,14 @@
 [requires]
+boost/1.88.0
 tracy/0.12.1
 
 [generators]
 CMakeDeps
 CMakeToolchain
+
+[layout]
+cmake_layout
+
+[options]
+boost/*:header_only=True
+boost/*:shared=False
