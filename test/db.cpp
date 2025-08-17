@@ -79,11 +79,11 @@ struct Entry
 {
     uint64_t key_size;   // Size of the key in bytes
     uint64_t value_size; // Size of the value in bytes
-    uint8_t data[0];     // Key and value data (allocated dynamically)
+    uint8_t data[1];     // Key and value data (allocated dynamically)
 
     static uint64_t size_of(uint64_t key_size, uint64_t value_size)
     {
-        return sizeof(Entry) + key_size + value_size;
+        return sizeof(Entry) + key_size + value_size - sizeof(uint8_t); // -1 for the first byte in data
     }
 
     std::string_view key() const
@@ -107,6 +107,31 @@ struct Entry
 #pragma pack(pop)
 
 #pragma pack(push, 1)
+struct NodeEntry
+{
+    uint64_t key_size; // Size of the key in bytes
+    uint64_t offset;   // Offset of the entry in the file
+    uint8_t data[1];   // Key data (allocated dynamically)
+
+    static uint64_t size_of(uint64_t key_size)
+    {
+        return sizeof(NodeEntry) + key_size - sizeof(uint8_t); // -1 for the first byte in data
+    }
+
+    void set_key(const std::string_view &key)
+    {
+        key_size = key.size();
+        std::memcpy(data, key.data(), key_size);
+    }
+
+    std::string_view key() const
+    {
+        return std::string_view(reinterpret_cast<const char *>(data), key_size);
+    }
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
 struct Node
 {
     uint32_t depth;        // Depth of this node in the tree
@@ -114,25 +139,25 @@ struct Node
     uint32_t entry_end;    // Index of last entry in this node (exclusive)
     uint32_t num_children; // Number of child nodes (if internal node) or child entries (if leaf node)
     uint32_t node_size;    // Size of this node in bytes
-    uint8_t data[0];       // Key sizes, keys, and child offsets (allocated dynamically)
+    NodeEntry data[1];     // Key sizes, keys, and child offsets (allocated dynamically)
 
     static uint64_t size_of(uint32_t num_entries, EntryScanner scanner)
     {
-        uint64_t total_size = sizeof(Node);
+        uint64_t total_size = sizeof(Node) - sizeof(NodeEntry); // -1 for the first NodeEntry
         for (uint32_t i = 0; i < num_entries; ++i)
         {
-            total_size += 2 * sizeof(uint64_t) + scanner.next_entry()->key().size();
+            total_size += NodeEntry::size_of(scanner.next_entry()->key().size());
         }
         return total_size;
     }
 
     static uint64_t size_of(uint32_t num_children, NodeScanner scanner)
     {
-        uint64_t total_size = sizeof(Node);
+        uint64_t total_size = sizeof(Node) - sizeof(NodeEntry); // -1 for the first NodeEntry
         for (uint32_t i = 0; i < num_children; ++i)
         {
             Node *child_node = scanner.next_node();
-            total_size += 2 * sizeof(uint64_t) + child_node->get_key(0).size();
+            total_size += NodeEntry::size_of(child_node->get_entry(0)->key().size());
         }
         return total_size;
     }
@@ -144,13 +169,12 @@ struct Node
         {
             uint64_t entry_offset = scanner.get_offset();
             std::string_view key = scanner.next_entry()->key();
-            uint64_t key_size = key.size();
-            std::memcpy(data + data_offset, &key_size, sizeof(uint64_t));
-            data_offset += sizeof(uint64_t);
-            std::memcpy(data + data_offset, &entry_offset, sizeof(uint64_t));
-            data_offset += sizeof(uint64_t);
-            std::memcpy(data + data_offset, key.data(), key_size);
-            data_offset += key.size();
+
+            NodeEntry *entry = reinterpret_cast<NodeEntry *>(reinterpret_cast<uint8_t *>(data) + data_offset);
+            entry->offset = entry_offset;
+            entry->set_key(key);
+
+            data_offset += NodeEntry::size_of(key.size());
         }
     }
 
@@ -162,14 +186,12 @@ struct Node
             uint64_t child_offset = scanner.get_offset();
             Node *child_node = scanner.next_node();
 
-            std::string_view min_key = child_node->get_key(0);
-            uint64_t key_size = min_key.size();
-            std::memcpy(data + data_offset, &key_size, sizeof(uint64_t));
-            data_offset += sizeof(uint64_t);
-            std::memcpy(data + data_offset, &child_offset, sizeof(uint64_t));
-            data_offset += sizeof(uint64_t);
-            std::memcpy(data + data_offset, min_key.data(), key_size);
-            data_offset += key_size;
+            std::string_view min_key = child_node->get_entry(0)->key();
+            NodeEntry *entry = reinterpret_cast<NodeEntry *>(reinterpret_cast<uint8_t *>(data) + data_offset);
+            entry->offset = child_offset;
+            entry->set_key(min_key);
+
+            data_offset += NodeEntry::size_of(min_key.size());
 
             depth = std::max(depth, child_node->depth + 1);
             if (i == 0)
@@ -183,16 +205,14 @@ struct Node
         }
     }
 
-    std::string_view get_key(uint32_t index) const
+    const NodeEntry *get_entry(uint32_t index) const
     {
-        const uint8_t *ptr = &data[0];
+        const NodeEntry *ptr = reinterpret_cast<const NodeEntry *>(data);
         for (uint32_t i = 0; i < index; ++i)
         {
-            uint64_t key_size = *reinterpret_cast<const uint64_t *>(ptr);
-            ptr += 2 * sizeof(uint64_t) + key_size; // Move to the next key
+            ptr += NodeEntry::size_of(ptr->key_size);
         }
-        uint64_t key_size = *reinterpret_cast<const uint64_t *>(ptr);
-        return std::string_view(reinterpret_cast<const char *>(ptr + 2 * sizeof(uint64_t)), key_size);
+        return ptr;
     }
 };
 #pragma pack(pop)
@@ -300,6 +320,36 @@ struct Reader
     Environment *env;
 
     Reader(Environment &env) : env(&env) {}
+
+    Header *get_header() const
+    {
+        return reinterpret_cast<Header *>(env->get_address());
+    }
+
+    Entry *get(const std::string_view &key) const
+    {
+        Header *header = get_header();
+
+        if (header->num_entries == 0)
+        {
+            return nullptr; // No entries in the database
+        }
+
+        uint64_t offset = header->root_offset;
+        uint32_t depth = header->depth;
+        while (depth > 0)
+        {
+            Node *node = reinterpret_cast<Node *>(env->get_address() + offset);
+            uint32_t num_children = node->num_children;
+            for (uint32_t i = 0; i < num_children; ++i)
+            {
+                // TODO: implement search
+                node->get_entry(i);
+            }
+
+            depth--;
+        }
+    }
 };
 
 EntryScanner::EntryScanner(Environment &env) : env(env)
