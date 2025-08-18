@@ -42,6 +42,11 @@ namespace tendb::pbt
             }
         }
 
+        Header *get_header() const
+        {
+            return reinterpret_cast<Header *>(env.get_address());
+        }
+
         void append_header()
         {
             ensure_size(sizeof(Header));
@@ -56,16 +61,6 @@ namespace tendb::pbt
 
             offset += sizeof(Header);
             base += sizeof(Header);
-        }
-
-        void overwrite_header(uint32_t depth, uint32_t num_leaf_nodes, uint32_t num_internal_nodes, uint32_t num_items, uint64_t root_offset)
-        {
-            Header *header = reinterpret_cast<Header *>(env.get_address());
-            header->depth = depth;
-            header->num_leaf_nodes = num_leaf_nodes;
-            header->num_internal_nodes = num_internal_nodes;
-            header->num_items = num_items;
-            header->root_offset = root_offset;
         }
 
         void append_item(const std::string_view &key, const std::string_view &value)

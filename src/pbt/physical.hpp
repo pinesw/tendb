@@ -39,7 +39,7 @@ namespace tendb::pbt
         const Environment &env;
         uint64_t offset;
 
-        NodeScanner(const Environment &env, uint64_t offset);
+        NodeScanner(const Environment &env);
         const Node *next_node();
         uint64_t get_offset();
     };
@@ -49,9 +49,12 @@ namespace tendb::pbt
         const Environment &env;
         uint64_t offset;
 
-        KeyValueItemScanner(const Environment &env, uint64_t offset);
+        KeyValueItemScanner(const Environment &env);
         const KeyValueItem *next_item();
-        uint64_t get_offset();
+        const KeyValueItem *current_item() const;
+        void next();
+        bool is_end() const;
+        uint64_t get_offset() const;
     };
 
     // Physical data structures
@@ -59,12 +62,14 @@ namespace tendb::pbt
 #pragma pack(push, 1)
     struct Header
     {
-        uint32_t magic;              // Magic number to identify the file format
-        uint32_t depth;              // Depth of the tree (highest depth of any node)
-        uint32_t num_leaf_nodes;     // Number of leaf nodes in the tree
-        uint32_t num_internal_nodes; // Number of internal nodes in the tree
-        uint32_t num_items;          // Total number of key-value items in the tree
-        uint64_t root_offset;        // Offset of the root node in the file
+        uint32_t magic;                        // Magic number to identify the file format
+        uint32_t depth;                        // Depth of the tree (highest depth of any node)
+        uint32_t num_leaf_nodes;               // Number of leaf nodes in the tree
+        uint32_t num_internal_nodes;           // Number of internal nodes in the tree
+        uint32_t num_items;                    // Total number of key-value items in the tree
+        uint64_t root_offset;                  // Offset of the root node in the file
+        uint64_t first_node_offset;            // Offset of the first node in the file
+        uint64_t begin_key_value_items_offset; // Offset where key-value items start in the file
     };
 #pragma pack(pop)
 
@@ -228,7 +233,11 @@ namespace tendb::pbt
         return reinterpret_cast<const ChildReference *>(address);
     }
 
-    NodeScanner::NodeScanner(const Environment &env, uint64_t offset) : env(env), offset(offset) {}
+    NodeScanner::NodeScanner(const Environment &env) : env(env)
+    {
+        Header *header = reinterpret_cast<Header *>(env.get_address());
+        offset = header->first_node_offset;
+    }
 
     const Node *NodeScanner::next_node()
     {
@@ -242,17 +251,39 @@ namespace tendb::pbt
         return offset;
     }
 
-    KeyValueItemScanner::KeyValueItemScanner(const Environment &env, uint64_t offset) : env(env), offset(offset) {}
+    KeyValueItemScanner::KeyValueItemScanner(const Environment &env) : env(env)
+    {
+        Header *header = reinterpret_cast<Header *>(env.get_address());
+        offset = header->begin_key_value_items_offset;
+    }
 
     const KeyValueItem *KeyValueItemScanner::next_item()
     {
-        const KeyValueItem *item = reinterpret_cast<const KeyValueItem *>(reinterpret_cast<const char *>(env.get_address()) + offset);
+        const KeyValueItem *item = current_item();
         uint64_t size = KeyValueItem::size_of(item->key_size, item->value_size);
         offset += size;
         return item;
     }
 
-    uint64_t KeyValueItemScanner::get_offset()
+    const KeyValueItem *KeyValueItemScanner::current_item() const
+    {
+        return reinterpret_cast<const KeyValueItem *>(reinterpret_cast<const char *>(env.get_address()) + offset);
+    }
+
+    void KeyValueItemScanner::next()
+    {
+        const KeyValueItem *item = current_item();
+        uint64_t size = KeyValueItem::size_of(item->key_size, item->value_size);
+        offset += size;
+    }
+
+    bool KeyValueItemScanner::is_end() const
+    {
+        Header *header = reinterpret_cast<Header *>(env.get_address());
+        return offset >= header->first_node_offset;
+    }
+
+    uint64_t KeyValueItemScanner::get_offset() const
     {
         return offset;
     }
