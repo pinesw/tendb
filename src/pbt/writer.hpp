@@ -1,109 +1,72 @@
 #pragma once
 
-#include <cstdint>
-#include <string_view>
-
 #include "pbt/environment.hpp"
 
 namespace tendb::pbt
 {
+    uint64_t div_ceil(uint64_t x, uint64_t y)
+    {
+        return (x + y - 1) / y;
+    }
+
     struct Writer
     {
         Environment &env;
-        uint64_t offset;
-        char *address;
+        Appender appender;
+        uint64_t branch_factor;
+        uint64_t begin_key_value_items_offset;
+        uint64_t num_items;
 
-        Writer(Environment &env) : env(env), offset(0)
+        Writer(Environment &env, uint64_t branch_factor) : env(env), appender(env), branch_factor(branch_factor)
         {
-            address = reinterpret_cast<char *>(env.get_address());
+            env.init();
+            appender.append_header();
+            begin_key_value_items_offset = appender.get_offset();
+            num_items = 0;
         }
 
-        ~Writer()
+        void add(const std::string_view &key, const std::string_view &value)
         {
-            env.set_size(offset);
+            appender.append_item(key, value);
+            ++num_items;
         }
 
-        uint64_t get_offset() const
+        void finish()
         {
-            return offset;
-        }
+            uint64_t num_leaf_nodes = div_ceil(num_items, branch_factor);
+            uint64_t begin_node_offset = appender.get_offset();
 
-        void ensure_size(uint64_t size)
-        {
-            if (env.get_size() < offset + size)
+            tendb::pbt::KeyValueItemScanner kv_scanner(reinterpret_cast<char *>(env.get_address()) + begin_key_value_items_offset, begin_key_value_items_offset);
+            tendb::pbt::NodeScanner node_scanner(reinterpret_cast<char *>(env.get_address()) + begin_node_offset, begin_node_offset);
+
+            uint64_t last_node_offset = 0;
+            for (uint64_t i = 0; i < num_items; i += branch_factor)
             {
-                env.set_size(std::max(offset + size, 2 * env.get_size()));
-                address = reinterpret_cast<char *>(env.get_address()) + offset;
+                uint32_t item_start = static_cast<uint32_t>(i);
+                uint32_t item_end = static_cast<uint32_t>(std::min(i + branch_factor, num_items));
+                last_node_offset = appender.get_offset();
+                appender.append_leaf_node(item_start, item_end, kv_scanner);
             }
-        }
 
-        void append_header()
-        {
-            ensure_size(sizeof(Header));
+            uint64_t prev_depth_num_nodes = num_leaf_nodes;
+            uint32_t num_internal_nodes = 0;
+            uint32_t depth = 0;
+            while (prev_depth_num_nodes > 1)
+            {
+                for (size_t i = 0; i < prev_depth_num_nodes; i += branch_factor)
+                {
+                    uint32_t child_start = static_cast<uint32_t>(i);
+                    uint32_t child_end = static_cast<uint32_t>(std::min(i + branch_factor, prev_depth_num_nodes));
+                    last_node_offset = appender.get_offset();
+                    appender.append_internal_node(child_start, child_end, node_scanner);
+                }
 
-            Header *header = new (address) Header;
-            header->magic = 0x1EAF1111;
-            header->depth = 0;
-            header->num_leaf_nodes = 0;
-            header->num_internal_nodes = 0;
-            header->num_entries = 0;
-            header->root_offset = 0;
+                prev_depth_num_nodes = div_ceil(prev_depth_num_nodes, branch_factor);
+                num_internal_nodes += prev_depth_num_nodes;
+                ++depth;
+            }
 
-            offset += sizeof(Header);
-            address += sizeof(Header);
-        }
-
-        void overwrite_header(uint32_t depth, uint32_t num_leaf_nodes, uint32_t num_internal_nodes, uint32_t num_entries, uint64_t root_offset)
-        {
-            Header *header = reinterpret_cast<Header *>(env.get_address());
-            header->depth = depth;
-            header->num_leaf_nodes = num_leaf_nodes;
-            header->num_internal_nodes = num_internal_nodes;
-            header->num_entries = num_entries;
-            header->root_offset = root_offset;
-        }
-
-        void append_entry(const std::string_view &key, const std::string_view &value)
-        {
-            uint64_t total_size = KeyValueItem::size_of(key.size(), value.size());
-            ensure_size(total_size);
-
-            KeyValueItem *entry = new (address) KeyValueItem;
-            entry->set_key_value(key, value);
-
-            offset += total_size;
-            address += total_size;
-        }
-
-        void append_leaf_node(uint32_t entry_start, uint32_t entry_end, KeyValueItemScanner &scanner)
-        {
-            uint64_t total_size = Node::size_of(entry_end - entry_start, scanner);
-            ensure_size(total_size);
-
-            Node *node = new (address) Node;
-            node->depth = 0;
-            node->entry_start = entry_start;
-            node->entry_end = entry_end;
-            node->num_children = entry_end - entry_start;
-            node->node_size = total_size;
-            node->set_entries(entry_end - entry_start, scanner);
-
-            offset += total_size;
-            address += total_size;
-        }
-
-        void append_internal_node(uint32_t child_start, uint32_t child_end, NodeScanner &scanner)
-        {
-            uint64_t total_size = Node::size_of(child_end - child_start, scanner);
-            ensure_size(total_size);
-
-            Node *node = new (address) Node;
-            node->num_children = child_end - child_start;
-            node->node_size = total_size;
-            node->set_children(child_end - child_start, scanner);
-
-            offset += total_size;
-            address += total_size;
+            appender.overwrite_header(depth, num_leaf_nodes, num_internal_nodes, num_items, last_node_offset);
         }
     };
 }

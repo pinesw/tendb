@@ -24,7 +24,7 @@ namespace tendb::pbt
     struct ChildReferenceIterator
     {
         const Node *node;
-        const uint8_t *address;
+        const char *address;
         uint32_t index;
 
         bool has_next() const;
@@ -48,7 +48,7 @@ namespace tendb::pbt
         uint64_t offset;
 
         KeyValueItemScanner(char *address, uint64_t offset);
-        KeyValueItem *next_entry();
+        KeyValueItem *next_item();
         uint64_t get_offset();
     };
 
@@ -61,7 +61,7 @@ namespace tendb::pbt
         uint32_t depth;              // Depth of the tree (highest depth of any node)
         uint32_t num_leaf_nodes;     // Number of leaf nodes in the tree
         uint32_t num_internal_nodes; // Number of internal nodes in the tree
-        uint32_t num_entries;        // Total number of key-value entries in the tree
+        uint32_t num_items;          // Total number of key-value items in the tree
         uint64_t root_offset;        // Offset of the root node in the file
     };
 #pragma pack(pop)
@@ -102,7 +102,7 @@ namespace tendb::pbt
     struct ChildReference
     {
         uint64_t key_size; // Size of the key in bytes
-        uint64_t offset;   // Offset of the entry in the file
+        uint64_t offset;   // Offset of the child node or item in the file
         char data[1];      // Key data (allocated dynamically)
 
         static uint64_t size_of(uint64_t key_size)
@@ -127,18 +127,18 @@ namespace tendb::pbt
     struct Node
     {
         uint32_t depth;         // Depth of this node in the tree
-        uint32_t entry_start;   // Index of first entry in this node
-        uint32_t entry_end;     // Index of last entry in this node (exclusive)
-        uint32_t num_children;  // Number of child nodes (if internal node) or child entries (if leaf node)
+        uint32_t item_start;    // Index of first item covered by this node
+        uint32_t item_end;      // Index of last item covered by this node (exclusive)
+        uint32_t num_children;  // Number of child nodes (if internal node) or child items (if leaf node)
         uint32_t node_size;     // Size of this node in bytes
         ChildReference data[1]; // Key sizes, keys, and child offsets (allocated dynamically)
 
-        static uint64_t size_of(uint32_t num_entries, KeyValueItemScanner scanner)
+        static uint64_t size_of(uint32_t num_items, KeyValueItemScanner scanner)
         {
             uint64_t total_size = sizeof(Node) - sizeof(data);
-            for (uint32_t i = 0; i < num_entries; ++i)
+            for (uint32_t i = 0; i < num_items; ++i)
             {
-                total_size += ChildReference::size_of(scanner.next_entry()->key().size());
+                total_size += ChildReference::size_of(scanner.next_item()->key().size());
             }
             return total_size;
         }
@@ -149,22 +149,22 @@ namespace tendb::pbt
             for (uint32_t i = 0; i < num_children; ++i)
             {
                 Node *child_node = scanner.next_node();
-                total_size += ChildReference::size_of(child_node->first_entry()->key().size());
+                total_size += ChildReference::size_of(child_node->first_child()->key().size());
             }
             return total_size;
         }
 
-        void set_entries(uint32_t num_entries, KeyValueItemScanner &scanner)
+        void set_items(uint32_t num_items, KeyValueItemScanner &scanner)
         {
             uint64_t data_offset = 0;
-            for (uint32_t i = 0; i < num_entries; ++i)
+            for (uint32_t i = 0; i < num_items; ++i)
             {
-                uint64_t entry_offset = scanner.get_offset();
-                std::string_view key = scanner.next_entry()->key();
+                uint64_t item_offset = scanner.get_offset();
+                std::string_view key = scanner.next_item()->key();
 
-                ChildReference *entry = reinterpret_cast<ChildReference *>(reinterpret_cast<uint8_t *>(data) + data_offset);
-                entry->offset = entry_offset;
-                entry->set_key(key);
+                ChildReference *child = reinterpret_cast<ChildReference *>(reinterpret_cast<char *>(data) + data_offset);
+                child->offset = item_offset;
+                child->set_key(key);
 
                 data_offset += ChildReference::size_of(key.size());
             }
@@ -178,31 +178,31 @@ namespace tendb::pbt
                 uint64_t child_offset = scanner.get_offset();
                 Node *child_node = scanner.next_node();
 
-                std::string_view min_key = child_node->first_entry()->key();
-                ChildReference *entry = reinterpret_cast<ChildReference *>(reinterpret_cast<uint8_t *>(data) + data_offset);
-                entry->offset = child_offset;
-                entry->set_key(min_key);
+                std::string_view min_key = child_node->first_child()->key();
+                ChildReference *child = reinterpret_cast<ChildReference *>(reinterpret_cast<char *>(data) + data_offset);
+                child->offset = child_offset;
+                child->set_key(min_key);
 
                 data_offset += ChildReference::size_of(min_key.size());
 
                 depth = std::max(depth, child_node->depth + 1);
                 if (i == 0)
                 {
-                    entry_start = child_node->entry_start;
+                    item_start = child_node->item_start;
                 }
                 if (i == num_children - 1)
                 {
-                    entry_end = child_node->entry_end;
+                    item_end = child_node->item_end;
                 }
             }
         }
 
         const ChildReferenceIterator child_reference_iterator() const
         {
-            return ChildReferenceIterator{this, reinterpret_cast<const uint8_t *>(data), 0};
+            return ChildReferenceIterator{this, reinterpret_cast<const char *>(data), 0};
         }
 
-        const ChildReference *first_entry() const
+        const ChildReference *first_child() const
         {
             return reinterpret_cast<const ChildReference *>(data);
         }
@@ -216,8 +216,8 @@ namespace tendb::pbt
 
     void ChildReferenceIterator::next()
     {
-        const ChildReference *entry = current();
-        address += ChildReference::size_of(entry->key_size);
+        const ChildReference *child = current();
+        address += ChildReference::size_of(child->key_size);
         ++index;
     }
 
@@ -243,13 +243,13 @@ namespace tendb::pbt
 
     KeyValueItemScanner::KeyValueItemScanner(char *address, uint64_t offset) : address(address), offset(offset) {}
 
-    KeyValueItem *KeyValueItemScanner::next_entry()
+    KeyValueItem *KeyValueItemScanner::next_item()
     {
-        KeyValueItem *entry = reinterpret_cast<KeyValueItem *>(address);
-        uint64_t size = KeyValueItem::size_of(entry->key_size, entry->value_size);
+        KeyValueItem *item = reinterpret_cast<KeyValueItem *>(address);
+        uint64_t size = KeyValueItem::size_of(item->key_size, item->value_size);
         offset += size;
         address += size;
-        return entry;
+        return item;
     }
 
     uint64_t KeyValueItemScanner::get_offset()

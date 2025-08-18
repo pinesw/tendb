@@ -93,6 +93,11 @@ namespace tendb::pbt
 
         void set_size(uint64_t size)
         {
+            if (size == file_size)
+            {
+                return; // No change needed
+            }
+
             unmap_file();
             set_file_size(size);
             map_file();

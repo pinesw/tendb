@@ -28,9 +28,9 @@ namespace tendb::pbt
 
         KeyValueItem *get(const std::string_view &key) const
         {
-            if (header->num_entries == 0)
+            if (header->num_items == 0)
             {
-                return nullptr; // No entries in the database
+                return nullptr; // No items in the tree
             }
 
             uint64_t offset = header->root_offset;
@@ -43,11 +43,11 @@ namespace tendb::pbt
 
                 while (itr.has_next())
                 {
-                    const ChildReference *node_entry = itr.current();
+                    const ChildReference *child = itr.current();
 
-                    if (env->compare_fn(key, node_entry->key()) >= 0)
+                    if (env->compare_fn(key, child->key()) >= 0)
                     {
-                        offset = node_entry->offset;
+                        offset = child->offset;
                     }
                     else
                     {
@@ -69,12 +69,11 @@ namespace tendb::pbt
             ChildReferenceIterator itr = leaf_node->child_reference_iterator();
             while (itr.has_next())
             {
-                const ChildReference *node_entry = itr.current();
-                if (env->compare_fn(key, node_entry->key()) == 0)
+                const ChildReference *child = itr.current();
+                if (env->compare_fn(key, child->key()) == 0)
                 {
-                    // Found the entry
-                    char *entry_address = reinterpret_cast<char *>(env->get_address()) + node_entry->offset;
-                    return reinterpret_cast<KeyValueItem *>(entry_address);
+                    // Found the item
+                    return reinterpret_cast<KeyValueItem *>(reinterpret_cast<char *>(env->get_address()) + child->offset);
                 }
                 itr.next();
             }
