@@ -10,8 +10,6 @@
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 
-#include "pbt/physical.hpp"
-
 namespace tendb::pbt
 {
     // Comparison function for entries
@@ -25,7 +23,7 @@ namespace tendb::pbt
 
     struct Environment
     {
-        static constexpr uint64_t min_file_size = sizeof(Header);
+        static constexpr uint64_t initial_file_size = 1024 * 1024; // 1 MB
 
         std::string path;
         boost::interprocess::file_mapping *mapping;
@@ -55,7 +53,12 @@ namespace tendb::pbt
                 create_file();
             }
 
-            set_size(min_file_size);
+            set_size(initial_file_size);
+
+            if (!mapping)
+            {
+                map_file();
+            }
         }
 
         void create_file()
