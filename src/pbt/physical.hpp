@@ -7,6 +7,8 @@
 #include <string>
 #include <string_view>
 
+#include "pbt/environment.hpp"
+
 namespace tendb::pbt
 {
     // Forward declarations
@@ -34,21 +36,21 @@ namespace tendb::pbt
 
     struct NodeScanner
     {
-        char *address;
+        const Environment &env;
         uint64_t offset;
 
-        NodeScanner(char *address, uint64_t offset);
-        Node *next_node();
+        NodeScanner(const Environment &env, uint64_t offset);
+        const Node *next_node();
         uint64_t get_offset();
     };
 
     struct KeyValueItemScanner
     {
-        char *address;
+        const Environment &env;
         uint64_t offset;
 
-        KeyValueItemScanner(char *address, uint64_t offset);
-        KeyValueItem *next_item();
+        KeyValueItemScanner(const Environment &env, uint64_t offset);
+        const KeyValueItem *next_item();
         uint64_t get_offset();
     };
 
@@ -148,7 +150,7 @@ namespace tendb::pbt
             uint64_t total_size = sizeof(Node) - sizeof(ChildReference); // -1 for the first ChildReference
             for (uint32_t i = 0; i < num_children; ++i)
             {
-                Node *child_node = scanner.next_node();
+                const Node *child_node = scanner.next_node();
                 total_size += ChildReference::size_of(child_node->first_child()->key().size());
             }
             return total_size;
@@ -176,7 +178,7 @@ namespace tendb::pbt
             for (uint32_t i = 0; i < num_children; ++i)
             {
                 uint64_t child_offset = scanner.get_offset();
-                Node *child_node = scanner.next_node();
+                const Node *child_node = scanner.next_node();
 
                 std::string_view min_key = child_node->first_child()->key();
                 ChildReference *child = reinterpret_cast<ChildReference *>(reinterpret_cast<char *>(data) + data_offset);
@@ -226,13 +228,12 @@ namespace tendb::pbt
         return reinterpret_cast<const ChildReference *>(address);
     }
 
-    NodeScanner::NodeScanner(char *address, uint64_t offset) : address(address), offset(offset) {}
+    NodeScanner::NodeScanner(const Environment &env, uint64_t offset) : env(env), offset(offset) {}
 
-    Node *NodeScanner::next_node()
+    const Node *NodeScanner::next_node()
     {
-        Node *node = reinterpret_cast<Node *>(address);
+        const Node *node = reinterpret_cast<const Node *>(reinterpret_cast<const char *>(env.get_address()) + offset);
         offset += node->node_size;
-        address += node->node_size;
         return node;
     }
 
@@ -241,14 +242,13 @@ namespace tendb::pbt
         return offset;
     }
 
-    KeyValueItemScanner::KeyValueItemScanner(char *address, uint64_t offset) : address(address), offset(offset) {}
+    KeyValueItemScanner::KeyValueItemScanner(const Environment &env, uint64_t offset) : env(env), offset(offset) {}
 
-    KeyValueItem *KeyValueItemScanner::next_item()
+    const KeyValueItem *KeyValueItemScanner::next_item()
     {
-        KeyValueItem *item = reinterpret_cast<KeyValueItem *>(address);
+        const KeyValueItem *item = reinterpret_cast<const KeyValueItem *>(reinterpret_cast<const char *>(env.get_address()) + offset);
         uint64_t size = KeyValueItem::size_of(item->key_size, item->value_size);
         offset += size;
-        address += size;
         return item;
     }
 

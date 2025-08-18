@@ -36,8 +36,8 @@ namespace tendb::pbt
             uint64_t num_leaf_nodes = div_ceil(num_items, branch_factor);
             uint64_t begin_node_offset = appender.get_offset();
 
-            tendb::pbt::KeyValueItemScanner kv_scanner(reinterpret_cast<char *>(env.get_address()) + begin_key_value_items_offset, begin_key_value_items_offset);
-            tendb::pbt::NodeScanner node_scanner(reinterpret_cast<char *>(env.get_address()) + begin_node_offset, begin_node_offset);
+            tendb::pbt::KeyValueItemScanner kv_scanner(env, begin_key_value_items_offset);
+            tendb::pbt::NodeScanner node_scanner(env, begin_node_offset);
 
             uint64_t last_node_offset = 0;
             for (uint64_t i = 0; i < num_items; i += branch_factor)
