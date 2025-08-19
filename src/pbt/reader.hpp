@@ -38,13 +38,10 @@ namespace tendb::pbt
             while (depth > 0 && offset != 0)
             {
                 Node *node = get_node_at_offset(offset);
-                ChildReferenceIterator itr = node->child_reference_iterator();
                 offset = 0;
 
-                while (itr.has_next())
+                for (const auto *child : *node)
                 {
-                    const ChildReference *child = itr.current();
-
                     if (env->compare_fn(key, child->key()) >= 0)
                     {
                         offset = child->offset;
@@ -53,8 +50,6 @@ namespace tendb::pbt
                     {
                         break;
                     }
-
-                    itr.next();
                 }
 
                 --depth;
@@ -66,16 +61,14 @@ namespace tendb::pbt
             }
 
             Node *leaf_node = get_node_at_offset(offset);
-            ChildReferenceIterator itr = leaf_node->child_reference_iterator();
-            while (itr.has_next())
+
+            for (const auto *child : *leaf_node)
             {
-                const ChildReference *child = itr.current();
                 if (env->compare_fn(key, child->key()) == 0)
                 {
                     // Found the item
                     return reinterpret_cast<KeyValueItem *>(reinterpret_cast<char *>(env->get_address()) + child->offset);
                 }
-                itr.next();
             }
 
             return nullptr;

@@ -4,6 +4,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <iterator>
 #include <string>
 #include <string_view>
 
@@ -21,18 +22,7 @@ namespace tendb::pbt
     struct ChildReference;
     struct ChildReferenceIterator;
 
-    // Declare scanners and iterators
-
-    struct ChildReferenceIterator
-    {
-        const Node *node;
-        const char *address;
-        uint32_t index;
-
-        bool has_next() const;
-        void next();
-        const ChildReference *current() const;
-    };
+    // Declare scanners
 
     struct NodeScanner
     {
@@ -111,6 +101,11 @@ namespace tendb::pbt
         uint64_t key_size; // Size of the key in bytes
         uint64_t offset;   // Offset of the child node or item in the file
         char data[1];      // Key data (allocated dynamically)
+
+        ChildReference(const ChildReference &) = delete;
+        ChildReference(ChildReference &&) = delete;
+        ChildReference &operator=(const ChildReference &) = delete;
+        ChildReference &operator=(ChildReference &&) = delete;
 
         static uint64_t size_of(uint64_t key_size)
         {
@@ -204,9 +199,49 @@ namespace tendb::pbt
             }
         }
 
-        const ChildReferenceIterator child_reference_iterator() const
+        struct ChildReferenceIterator
         {
-            return ChildReferenceIterator{this, reinterpret_cast<const char *>(data), 0};
+            const char *current;
+            const char *end;
+
+            using iterator_category = std::input_iterator_tag;
+            using difference_type = std::ptrdiff_t;
+
+            const ChildReference *operator*() const
+            {
+                return reinterpret_cast<const ChildReference *>(current);
+            }
+
+            ChildReferenceIterator &operator++()
+            {
+                if (current < end)
+                {
+                    current += ChildReference::size_of(reinterpret_cast<const ChildReference *>(current)->key_size);
+                }
+                return *this;
+            }
+
+            ChildReferenceIterator operator++(int)
+            {
+                ChildReferenceIterator temp = *this;
+                ++(*this);
+                return temp;
+            }
+
+            bool operator==(const ChildReferenceIterator &other) const
+            {
+                return current == other.current;
+            }
+        };
+
+        const ChildReferenceIterator begin() const
+        {
+            return ChildReferenceIterator(reinterpret_cast<const char *>(data), reinterpret_cast<const char *>(this) + node_size);
+        }
+
+        const ChildReferenceIterator end() const
+        {
+            return ChildReferenceIterator(reinterpret_cast<const char *>(this) + node_size, reinterpret_cast<const char *>(this) + node_size);
         }
 
         const ChildReference *first_child() const
@@ -215,23 +250,6 @@ namespace tendb::pbt
         }
     };
 #pragma pack(pop)
-
-    bool ChildReferenceIterator::has_next() const
-    {
-        return index < node->num_children;
-    }
-
-    void ChildReferenceIterator::next()
-    {
-        const ChildReference *child = current();
-        address += ChildReference::size_of(child->key_size);
-        ++index;
-    }
-
-    const ChildReference *ChildReferenceIterator::current() const
-    {
-        return reinterpret_cast<const ChildReference *>(address);
-    }
 
     NodeScanner::NodeScanner(const Environment &env) : env(env)
     {

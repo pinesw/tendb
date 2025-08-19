@@ -80,7 +80,7 @@ namespace tendb::pbt
             uint64_t total_size = Node::size_of(item_end - item_start, scanner);
             ensure_size(total_size);
 
-            Node *node = new (base) Node;
+            Node *node = reinterpret_cast<Node *>(base);
             node->depth = 0;
             node->item_start = item_start;
             node->item_end = item_end;
@@ -97,7 +97,7 @@ namespace tendb::pbt
             uint64_t total_size = Node::size_of(child_end - child_start, scanner);
             ensure_size(total_size);
 
-            Node *node = new (base) Node;
+            Node *node = reinterpret_cast<Node *>(base);
             node->num_children = child_end - child_start;
             node->node_size = total_size;
             node->set_children(child_end - child_start, scanner);

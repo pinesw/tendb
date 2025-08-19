@@ -11,7 +11,7 @@
 // #include <tracy/tracy/Tracy.hpp>
 #define ZoneScoped
 
-#include "skip_list.hpp"
+#include "skip_list/skip_list.hpp"
 
 constexpr static size_t BENCHMARK_NUM_KEYS = 100000;
 constexpr static size_t BENCHMARK_NUM_THREADS = 12;
