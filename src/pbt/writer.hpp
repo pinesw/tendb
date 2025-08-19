@@ -86,6 +86,8 @@ namespace tendb::pbt
             environment.storage.set_size(appender.get_offset());
         }
 
+        // TODO: add variadic merge (>= 2 sources)
+
         static void merge(const Environment &source_a, const Environment &source_b, Environment &target)
         {
             Header *header_a = reinterpret_cast<Header *>(source_a.storage.get_address());
