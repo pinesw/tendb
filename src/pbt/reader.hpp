@@ -1,8 +1,10 @@
 #pragma once
 
+#include <cstdint>
 #include <string_view>
 
 #include "pbt/environment.hpp"
+#include "pbt/physical.hpp"
 
 namespace tendb::pbt
 {
