@@ -8,7 +8,7 @@
 #include <string>
 #include <string_view>
 
-#include "pbt/environment.hpp"
+#include "pbt/storage.hpp"
 
 namespace tendb::pbt
 {
@@ -63,7 +63,7 @@ namespace tendb::pbt
 
         struct Iterator
         {
-            const Environment &env;
+            const Storage &storage;
             uint64_t current_offset;
 
             using iterator_category = std::input_iterator_tag;
@@ -71,7 +71,7 @@ namespace tendb::pbt
 
             const KeyValueItem *operator*() const
             {
-                return reinterpret_cast<const KeyValueItem *>(reinterpret_cast<const char *>(env.get_address()) + current_offset);
+                return reinterpret_cast<const KeyValueItem *>(reinterpret_cast<const char *>(storage.get_address()) + current_offset);
             }
 
             Iterator &operator++()
@@ -191,7 +191,7 @@ namespace tendb::pbt
 
         struct Iterator
         {
-            const Environment &env;
+            const Storage &storage;
             uint64_t current_offset;
 
             using iterator_category = std::input_iterator_tag;
@@ -199,7 +199,7 @@ namespace tendb::pbt
 
             const Node *operator*() const
             {
-                return reinterpret_cast<const Node *>(reinterpret_cast<const char *>(env.get_address()) + current_offset);
+                return reinterpret_cast<const Node *>(reinterpret_cast<const char *>(storage.get_address()) + current_offset);
             }
 
             Iterator &operator++()

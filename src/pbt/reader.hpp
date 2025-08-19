@@ -4,32 +4,35 @@
 #include <string_view>
 
 #include "pbt/environment.hpp"
-#include "pbt/physical.hpp"
+#include "pbt/formats.hpp"
 
 namespace tendb::pbt
 {
     struct Reader
     {
-        const Environment &env;
-        Header *header;
+        const Environment &environment;
 
-        Reader(const Environment &env) : env(env)
-        {
-            header = reinterpret_cast<Header *>(env.get_address());
-        }
+        Reader(const Environment &environment) : environment(environment) {}
 
         Header *get_header() const
         {
-            return reinterpret_cast<Header *>(env.get_address());
+            return reinterpret_cast<Header *>(environment.storage.get_address());
         }
 
         Node *get_node_at_offset(uint64_t offset) const
         {
-            return reinterpret_cast<Node *>(reinterpret_cast<char *>(env.get_address()) + offset);
+            return reinterpret_cast<Node *>(reinterpret_cast<char *>(environment.storage.get_address()) + offset);
+        }
+
+        KeyValueItem *get_item_at_offset(uint64_t offset) const
+        {
+            return reinterpret_cast<KeyValueItem *>(reinterpret_cast<char *>(environment.storage.get_address()) + offset);
         }
 
         KeyValueItem *get(const std::string_view &key) const
         {
+            Header *header = get_header();
+
             if (header->num_items == 0)
             {
                 return nullptr; // No items in the tree
@@ -44,7 +47,7 @@ namespace tendb::pbt
 
                 for (const auto *child : *node)
                 {
-                    if (env.compare_fn(key, child->key()) >= 0)
+                    if (environment.options.compare_fn(key, child->key()) >= 0)
                     {
                         offset = child->offset;
                     }
@@ -66,10 +69,10 @@ namespace tendb::pbt
 
             for (const auto *child : *leaf_node)
             {
-                if (env.compare_fn(key, child->key()) == 0)
+                if (environment.options.compare_fn(key, child->key()) == 0)
                 {
                     // Found the item
-                    return reinterpret_cast<KeyValueItem *>(reinterpret_cast<char *>(env.get_address()) + child->offset);
+                    return get_item_at_offset(child->offset);
                 }
             }
 
