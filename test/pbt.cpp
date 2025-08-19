@@ -1,7 +1,9 @@
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <random>
 #include <string>
 #include <string_view>
 
@@ -110,7 +112,32 @@ void test_merge()
     std::cout << "test_merge done" << std::endl;
 }
 
-void benchmark_read_all_keys()
+void benchmark_iterate_all_sequential()
+{
+    std::vector<std::string> keys = generate_keys_sequence(BENCHMARK_NUM_KEYS);
+    std::vector<std::string> values = generate_values_sequence(BENCHMARK_NUM_KEYS);
+
+    std::string path = "test.pbt";
+    tendb::pbt::Environment env(path);
+    write_test_data(env, keys, values);
+
+    auto t1 = std::chrono::high_resolution_clock::now();
+    tendb::pbt::Header *header = reinterpret_cast<tendb::pbt::Header *>(env.get_address());
+    tendb::pbt::KeyValueItem::Iterator itr{env, header->begin_key_value_items_offset};
+    tendb::pbt::KeyValueItem::Iterator end{env, header->first_node_offset};
+    volatile uint64_t total_size = 0;
+    for (; itr != end; ++itr)
+    {
+        const tendb::pbt::KeyValueItem *item = *itr;
+        total_size += item->value_size; // Do something with the value to prevent compiler optimizations
+    }
+    auto t2 = std::chrono::high_resolution_clock::now();
+
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
+    std::cout << "benchmark_read_all_sequential: " << duration.count() << "μs" << std::endl;
+}
+
+void benchmark_read_all_sequential()
 {
     std::vector<std::string> keys = generate_keys_sequence(BENCHMARK_NUM_KEYS);
     std::vector<std::string> values = generate_values_sequence(BENCHMARK_NUM_KEYS);
@@ -121,16 +148,42 @@ void benchmark_read_all_keys()
 
     auto t1 = std::chrono::high_resolution_clock::now();
     tendb::pbt::Reader reader(env);
-    uint64_t total_size = 0;
+    volatile uint64_t total_size = 0;
     for (const auto &key : keys)
     {
         tendb::pbt::KeyValueItem *entry = reader.get(key);
-        total_size += entry->value_size; // Do something with the entry to prevent compiler optimizations
+        total_size += entry->value_size; // Do something with the value to prevent compiler optimizations
     }
     auto t2 = std::chrono::high_resolution_clock::now();
 
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
-    std::cout << "benchmark_read_all_keys: " << duration.count() << "μs" << std::endl;
+    std::cout << "benchmark_read_all_sequential: " << duration.count() << "μs" << std::endl;
+}
+
+void benchmark_read_all_random()
+{
+    std::vector<std::string> keys = generate_keys_sequence(BENCHMARK_NUM_KEYS);
+    std::vector<std::string> values = generate_values_sequence(BENCHMARK_NUM_KEYS);
+
+    std::string path = "test.pbt";
+    tendb::pbt::Environment env(path);
+    write_test_data(env, keys, values);
+
+    std::mt19937 g(0xC0FFEE);
+    std::shuffle(keys.begin(), keys.end(), g);
+
+    auto t1 = std::chrono::high_resolution_clock::now();
+    tendb::pbt::Reader reader(env);
+    volatile uint64_t total_size = 0; // Do something with the value to prevent compiler optimizations
+    for (const auto &key : keys)
+    {
+        tendb::pbt::KeyValueItem *entry = reader.get(key);
+        total_size += entry->value_size;
+    }
+    auto t2 = std::chrono::high_resolution_clock::now();
+
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
+    std::cout << "benchmark_read_all_random: " << duration.count() << "μs" << std::endl;
 }
 
 int main()
@@ -138,7 +191,9 @@ int main()
     test_write_and_read();
     test_merge();
 
-    benchmark_read_all_keys();
+    benchmark_iterate_all_sequential();
+    benchmark_read_all_sequential();
+    benchmark_read_all_random();
 
     return 0;
 }
