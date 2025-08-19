@@ -68,16 +68,16 @@ namespace tendb::pbt
             uint64_t total_size = KeyValueItem::size_of(key.size(), value.size());
             ensure_size(total_size);
 
-            KeyValueItem *item = new (base) KeyValueItem;
+            KeyValueItem *item = reinterpret_cast<KeyValueItem *>(base);
             item->set_key_value(key, value);
 
             offset += total_size;
             base += total_size;
         }
 
-        void append_leaf_node(uint32_t item_start, uint32_t item_end, KeyValueItemScanner &scanner)
+        void append_leaf_node(uint32_t item_start, uint32_t item_end, KeyValueItem::Iterator &itr)
         {
-            uint64_t total_size = Node::size_of(item_end - item_start, scanner);
+            uint64_t total_size = Node::size_of(item_end - item_start, itr);
             ensure_size(total_size);
 
             Node *node = reinterpret_cast<Node *>(base);
@@ -86,21 +86,21 @@ namespace tendb::pbt
             node->item_end = item_end;
             node->num_children = item_end - item_start;
             node->node_size = total_size;
-            node->set_items(item_end - item_start, scanner);
+            node->set_items(item_end - item_start, itr);
 
             offset += total_size;
             base += total_size;
         }
 
-        void append_internal_node(uint32_t child_start, uint32_t child_end, NodeScanner &scanner)
+        void append_internal_node(uint32_t child_start, uint32_t child_end, Node::Iterator &itr)
         {
-            uint64_t total_size = Node::size_of(child_end - child_start, scanner);
+            uint64_t total_size = Node::size_of(child_end - child_start, itr);
             ensure_size(total_size);
 
             Node *node = reinterpret_cast<Node *>(base);
             node->num_children = child_end - child_start;
             node->node_size = total_size;
-            node->set_children(child_end - child_start, scanner);
+            node->set_children(child_end - child_start, itr);
 
             offset += total_size;
             base += total_size;

@@ -12,43 +12,6 @@
 
 namespace tendb::pbt
 {
-    // Forward declarations
-
-    struct Header;
-    struct KeyValueItem;
-    struct KeyValueItemScanner;
-    struct Node;
-    struct NodeScanner;
-    struct ChildReference;
-    struct ChildReferenceIterator;
-
-    // Declare scanners
-
-    struct NodeScanner
-    {
-        const Environment &env;
-        uint64_t offset;
-
-        NodeScanner(const Environment &env);
-        const Node *next_node();
-        uint64_t get_offset();
-    };
-
-    struct KeyValueItemScanner
-    {
-        const Environment &env;
-        uint64_t offset;
-
-        KeyValueItemScanner(const Environment &env);
-        const KeyValueItem *next_item();
-        const KeyValueItem *current_item() const;
-        void next();
-        bool is_end() const;
-        uint64_t get_offset() const;
-    };
-
-    // Physical data structures
-
 #pragma pack(push, 1)
     struct Header
     {
@@ -69,6 +32,11 @@ namespace tendb::pbt
         uint64_t key_size;   // Size of the key in bytes
         uint64_t value_size; // Size of the value in bytes
         char data[1];        // Key and value data (allocated dynamically)
+
+        KeyValueItem(const KeyValueItem &) = delete;
+        KeyValueItem(KeyValueItem &&) = delete;
+        KeyValueItem &operator=(const KeyValueItem &) = delete;
+        KeyValueItem &operator=(KeyValueItem &&) = delete;
 
         static uint64_t size_of(uint64_t key_size, uint64_t value_size)
         {
@@ -92,6 +60,39 @@ namespace tendb::pbt
             std::memcpy(data, key.data(), key_size);
             std::memcpy(data + key_size, value.data(), value_size);
         }
+
+        struct Iterator
+        {
+            const Environment &env;
+            uint64_t current_offset;
+
+            using iterator_category = std::input_iterator_tag;
+            using difference_type = std::ptrdiff_t;
+
+            const KeyValueItem *operator*() const
+            {
+                return reinterpret_cast<const KeyValueItem *>(reinterpret_cast<const char *>(env.get_address()) + current_offset);
+            }
+
+            Iterator &operator++()
+            {
+                const KeyValueItem *item = operator*();
+                current_offset += KeyValueItem::size_of(item->key_size, item->value_size);
+                return *this;
+            }
+
+            Iterator operator++(int)
+            {
+                Iterator temp = *this;
+                ++(*this);
+                return temp;
+            }
+
+            bool operator==(const Iterator &other) const
+            {
+                return current_offset == other.current_offset;
+            }
+        };
     };
 #pragma pack(pop)
 
@@ -122,6 +123,39 @@ namespace tendb::pbt
         {
             return std::string_view(reinterpret_cast<const char *>(data), key_size);
         }
+
+        struct Iterator
+        {
+            const char *current;
+            const char *end;
+
+            using iterator_category = std::input_iterator_tag;
+            using difference_type = std::ptrdiff_t;
+
+            const ChildReference *operator*() const
+            {
+                return reinterpret_cast<const ChildReference *>(current);
+            }
+
+            Iterator &operator++()
+            {
+                const ChildReference *child = operator*();
+                current += ChildReference::size_of(child->key_size);
+                return *this;
+            }
+
+            Iterator operator++(int)
+            {
+                Iterator temp = *this;
+                ++(*this);
+                return temp;
+            }
+
+            bool operator==(const Iterator &other) const
+            {
+                return current == other.current;
+            }
+        };
     };
 #pragma pack(pop)
 
@@ -135,34 +169,89 @@ namespace tendb::pbt
         uint32_t node_size;     // Size of this node in bytes
         ChildReference data[1]; // Key sizes, keys, and child offsets (allocated dynamically)
 
-        static uint64_t size_of(uint32_t num_items, KeyValueItemScanner scanner)
+        Node(const Node &) = delete;
+        Node(Node &&) = delete;
+        Node &operator=(const Node &) = delete;
+        Node &operator=(Node &&) = delete;
+
+        const ChildReference *first_child() const
+        {
+            return reinterpret_cast<const ChildReference *>(data);
+        }
+
+        const ChildReference::Iterator begin() const
+        {
+            return ChildReference::Iterator(reinterpret_cast<const char *>(data), reinterpret_cast<const char *>(this) + node_size);
+        }
+
+        const ChildReference::Iterator end() const
+        {
+            return ChildReference::Iterator(reinterpret_cast<const char *>(this) + node_size, reinterpret_cast<const char *>(this) + node_size);
+        }
+
+        struct Iterator
+        {
+            const Environment &env;
+            uint64_t current_offset;
+
+            using iterator_category = std::input_iterator_tag;
+            using difference_type = std::ptrdiff_t;
+
+            const Node *operator*() const
+            {
+                return reinterpret_cast<const Node *>(reinterpret_cast<const char *>(env.get_address()) + current_offset);
+            }
+
+            Iterator &operator++()
+            {
+                const Node *node = operator*();
+                current_offset += node->node_size;
+                return *this;
+            }
+
+            Iterator operator++(int)
+            {
+                Iterator temp = *this;
+                ++(*this);
+                return temp;
+            }
+
+            bool operator==(const Iterator &other) const
+            {
+                return current_offset == other.current_offset;
+            }
+        };
+
+        static uint64_t size_of(uint32_t num_items, KeyValueItem::Iterator itr)
         {
             uint64_t total_size = sizeof(Node) - sizeof(data);
             for (uint32_t i = 0; i < num_items; ++i)
             {
-                total_size += ChildReference::size_of(scanner.next_item()->key().size());
+                const KeyValueItem *item = *itr++;
+                total_size += ChildReference::size_of(item->key().size());
             }
             return total_size;
         }
 
-        static uint64_t size_of(uint32_t num_children, NodeScanner scanner)
+        static uint64_t size_of(uint32_t num_children, Node::Iterator itr)
         {
             uint64_t total_size = sizeof(Node) - sizeof(ChildReference); // -1 for the first ChildReference
             for (uint32_t i = 0; i < num_children; ++i)
             {
-                const Node *child_node = scanner.next_node();
+                const Node *child_node = *itr++;
                 total_size += ChildReference::size_of(child_node->first_child()->key().size());
             }
             return total_size;
         }
 
-        void set_items(uint32_t num_items, KeyValueItemScanner &scanner)
+        void set_items(uint32_t num_items, KeyValueItem::Iterator &itr)
         {
             uint64_t data_offset = 0;
             for (uint32_t i = 0; i < num_items; ++i)
             {
-                uint64_t item_offset = scanner.get_offset();
-                std::string_view key = scanner.next_item()->key();
+                uint64_t item_offset = itr.current_offset;
+                const KeyValueItem *item = *itr++;
+                std::string_view key = item->key();
 
                 ChildReference *child = reinterpret_cast<ChildReference *>(reinterpret_cast<char *>(data) + data_offset);
                 child->offset = item_offset;
@@ -172,13 +261,13 @@ namespace tendb::pbt
             }
         }
 
-        void set_children(uint32_t num_children, NodeScanner &scanner)
+        void set_children(uint32_t num_children, Node::Iterator &itr)
         {
             uint64_t data_offset = 0;
             for (uint32_t i = 0; i < num_children; ++i)
             {
-                uint64_t child_offset = scanner.get_offset();
-                const Node *child_node = scanner.next_node();
+                uint64_t child_offset = itr.current_offset;
+                const Node *child_node = *itr++;
 
                 std::string_view min_key = child_node->first_child()->key();
                 ChildReference *child = reinterpret_cast<ChildReference *>(reinterpret_cast<char *>(data) + data_offset);
@@ -198,111 +287,6 @@ namespace tendb::pbt
                 }
             }
         }
-
-        struct ChildReferenceIterator
-        {
-            const char *current;
-            const char *end;
-
-            using iterator_category = std::input_iterator_tag;
-            using difference_type = std::ptrdiff_t;
-
-            const ChildReference *operator*() const
-            {
-                return reinterpret_cast<const ChildReference *>(current);
-            }
-
-            ChildReferenceIterator &operator++()
-            {
-                if (current < end)
-                {
-                    current += ChildReference::size_of(reinterpret_cast<const ChildReference *>(current)->key_size);
-                }
-                return *this;
-            }
-
-            ChildReferenceIterator operator++(int)
-            {
-                ChildReferenceIterator temp = *this;
-                ++(*this);
-                return temp;
-            }
-
-            bool operator==(const ChildReferenceIterator &other) const
-            {
-                return current == other.current;
-            }
-        };
-
-        const ChildReferenceIterator begin() const
-        {
-            return ChildReferenceIterator(reinterpret_cast<const char *>(data), reinterpret_cast<const char *>(this) + node_size);
-        }
-
-        const ChildReferenceIterator end() const
-        {
-            return ChildReferenceIterator(reinterpret_cast<const char *>(this) + node_size, reinterpret_cast<const char *>(this) + node_size);
-        }
-
-        const ChildReference *first_child() const
-        {
-            return reinterpret_cast<const ChildReference *>(data);
-        }
     };
 #pragma pack(pop)
-
-    NodeScanner::NodeScanner(const Environment &env) : env(env)
-    {
-        Header *header = reinterpret_cast<Header *>(env.get_address());
-        offset = header->first_node_offset;
-    }
-
-    const Node *NodeScanner::next_node()
-    {
-        const Node *node = reinterpret_cast<const Node *>(reinterpret_cast<const char *>(env.get_address()) + offset);
-        offset += node->node_size;
-        return node;
-    }
-
-    uint64_t NodeScanner::get_offset()
-    {
-        return offset;
-    }
-
-    KeyValueItemScanner::KeyValueItemScanner(const Environment &env) : env(env)
-    {
-        Header *header = reinterpret_cast<Header *>(env.get_address());
-        offset = header->begin_key_value_items_offset;
-    }
-
-    const KeyValueItem *KeyValueItemScanner::next_item()
-    {
-        const KeyValueItem *item = current_item();
-        uint64_t size = KeyValueItem::size_of(item->key_size, item->value_size);
-        offset += size;
-        return item;
-    }
-
-    const KeyValueItem *KeyValueItemScanner::current_item() const
-    {
-        return reinterpret_cast<const KeyValueItem *>(reinterpret_cast<const char *>(env.get_address()) + offset);
-    }
-
-    void KeyValueItemScanner::next()
-    {
-        const KeyValueItem *item = current_item();
-        uint64_t size = KeyValueItem::size_of(item->key_size, item->value_size);
-        offset += size;
-    }
-
-    bool KeyValueItemScanner::is_end() const
-    {
-        Header *header = reinterpret_cast<Header *>(env.get_address());
-        return offset >= header->first_node_offset;
-    }
-
-    uint64_t KeyValueItemScanner::get_offset() const
-    {
-        return offset;
-    }
 }

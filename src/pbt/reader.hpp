@@ -8,22 +8,22 @@ namespace tendb::pbt
 {
     struct Reader
     {
-        Environment *env;
+        const Environment &env;
         Header *header;
 
-        Reader(Environment &env) : env(&env)
+        Reader(const Environment &env) : env(env)
         {
             header = reinterpret_cast<Header *>(env.get_address());
         }
 
         Header *get_header() const
         {
-            return reinterpret_cast<Header *>(env->get_address());
+            return reinterpret_cast<Header *>(env.get_address());
         }
 
         Node *get_node_at_offset(uint64_t offset) const
         {
-            return reinterpret_cast<Node *>(reinterpret_cast<char *>(env->get_address()) + offset);
+            return reinterpret_cast<Node *>(reinterpret_cast<char *>(env.get_address()) + offset);
         }
 
         KeyValueItem *get(const std::string_view &key) const
@@ -42,7 +42,7 @@ namespace tendb::pbt
 
                 for (const auto *child : *node)
                 {
-                    if (env->compare_fn(key, child->key()) >= 0)
+                    if (env.compare_fn(key, child->key()) >= 0)
                     {
                         offset = child->offset;
                     }
@@ -64,10 +64,10 @@ namespace tendb::pbt
 
             for (const auto *child : *leaf_node)
             {
-                if (env->compare_fn(key, child->key()) == 0)
+                if (env.compare_fn(key, child->key()) == 0)
                 {
                     // Found the item
-                    return reinterpret_cast<KeyValueItem *>(reinterpret_cast<char *>(env->get_address()) + child->offset);
+                    return reinterpret_cast<KeyValueItem *>(reinterpret_cast<char *>(env.get_address()) + child->offset);
                 }
             }
 

@@ -39,8 +39,8 @@ namespace tendb::pbt
             appender.get_header()->first_node_offset = first_node_offset;
             appender.get_header()->begin_key_value_items_offset = begin_key_value_items_offset;
 
-            tendb::pbt::KeyValueItemScanner kv_scanner(env);
-            tendb::pbt::NodeScanner node_scanner(env);
+            tendb::pbt::KeyValueItem::Iterator kv_itr{env, begin_key_value_items_offset};
+            tendb::pbt::Node::Iterator node_itr{env, first_node_offset};
 
             uint64_t last_node_offset = 0;
             for (uint64_t i = 0; i < num_items; i += branch_factor)
@@ -48,7 +48,7 @@ namespace tendb::pbt
                 uint32_t item_start = static_cast<uint32_t>(i);
                 uint32_t item_end = static_cast<uint32_t>(std::min(i + branch_factor, num_items));
                 last_node_offset = appender.get_offset();
-                appender.append_leaf_node(item_start, item_end, kv_scanner);
+                appender.append_leaf_node(item_start, item_end, kv_itr);
             }
 
             uint64_t prev_depth_num_nodes = num_leaf_nodes;
@@ -61,7 +61,7 @@ namespace tendb::pbt
                     uint32_t child_start = static_cast<uint32_t>(i);
                     uint32_t child_end = static_cast<uint32_t>(std::min(i + branch_factor, prev_depth_num_nodes));
                     last_node_offset = appender.get_offset();
-                    appender.append_internal_node(child_start, child_end, node_scanner);
+                    appender.append_internal_node(child_start, child_end, node_itr);
                 }
 
                 prev_depth_num_nodes = div_ceil(prev_depth_num_nodes, branch_factor);
@@ -80,33 +80,42 @@ namespace tendb::pbt
         {
             Header *header_a = reinterpret_cast<Header *>(source_env_a.get_address());
             Header *header_b = reinterpret_cast<Header *>(source_env_b.get_address());
-            KeyValueItemScanner scanner_a(source_env_a);
-            KeyValueItemScanner scanner_b(source_env_b);
+            KeyValueItem::Iterator itr_a{source_env_a, header_a->begin_key_value_items_offset};
+            KeyValueItem::Iterator itr_b{source_env_b, header_b->begin_key_value_items_offset};
+            KeyValueItem::Iterator end_a{source_env_a, header_a->first_node_offset};
+            KeyValueItem::Iterator end_b{source_env_b, header_b->first_node_offset};
 
             Writer writer(target_env, branch_factor);
 
             uint64_t total_items = header_a->num_items + header_b->num_items;
             for (uint64_t i = 0; i < total_items; ++i)
             {
-                if (scanner_a.is_end())
+                if (itr_a == end_a)
                 {
-                    writer.add(scanner_b.current_item()->key(), scanner_b.current_item()->value());
-                    scanner_b.next();
+                    const KeyValueItem *item_b = *itr_b;
+                    writer.add(item_b->key(), item_b->value());
+                    ++itr_b;
                 }
-                else if (scanner_b.is_end())
+                else if (itr_b == end_b)
                 {
-                    writer.add(scanner_a.current_item()->key(), scanner_a.current_item()->value());
-                    scanner_a.next();
-                }
-                else if (target_env.compare_fn(scanner_a.current_item()->key(), scanner_b.current_item()->key()) <= 0)
-                {
-                    writer.add(scanner_a.current_item()->key(), scanner_a.current_item()->value());
-                    scanner_a.next();
+                    const KeyValueItem *item_a = *itr_a;
+                    writer.add(item_a->key(), item_a->value());
+                    ++itr_a;
                 }
                 else
                 {
-                    writer.add(scanner_b.current_item()->key(), scanner_b.current_item()->value());
-                    scanner_b.next();
+                    const KeyValueItem *item_a = *itr_a;
+                    const KeyValueItem *item_b = *itr_b;
+                    if (target_env.compare_fn(item_a->key(), item_b->key()) <= 0)
+                    {
+                        writer.add(item_a->key(), item_a->value());
+                        ++itr_a;
+                    }
+                    else
+                    {
+                        writer.add(item_b->key(), item_b->value());
+                        ++itr_b;
+                    }
                 }
             }
 
