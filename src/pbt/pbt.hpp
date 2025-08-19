@@ -36,11 +36,24 @@ namespace tendb::pbt
             Writer::merge(source_a.environment, source_b.environment, target.environment);
         }
 
-        KeyValueItem *get(const std::string_view &key) const
+        const KeyValueItem::Iterator begin() const
+        {
+            return reader.begin();
+        }
+
+        const KeyValueItem::Iterator end() const
+        {
+            return reader.end();
+        }
+
+        const KeyValueItem::Iterator seek(const std::string_view &key) const
+        {
+            return reader.seek(key);
+        }
+
+        const KeyValueItem *get(const std::string_view &key) const
         {
             return reader.get(key);
         }
-
-        // TODO: add iterators, use them in merge()
     };
 }

@@ -54,7 +54,7 @@ void test_write_and_read()
 
     for (size_t i = 0; i < TEST_NUM_KEYS; ++i)
     {
-        tendb::pbt::KeyValueItem *entry = pbt.get(keys[i]);
+        const tendb::pbt::KeyValueItem *entry = pbt.get(keys[i]);
         if (!entry)
         {
             std::cerr << "Entry not found for key: " << keys[i] << std::endl;
@@ -89,7 +89,7 @@ void test_merge()
 
     for (size_t i = 0; i < TEST_NUM_KEYS; ++i)
     {
-        tendb::pbt::KeyValueItem *entry = pbt_target.get(keys[i]);
+        const tendb::pbt::KeyValueItem *entry = pbt_target.get(keys[i]);
         if (!entry)
         {
             std::cerr << "Entry not found after merge for key: " << keys[i] << std::endl;
@@ -116,8 +116,8 @@ void benchmark_iterate_all_sequential()
 
     auto t1 = std::chrono::high_resolution_clock::now();
     tendb::pbt::Header *header = reinterpret_cast<tendb::pbt::Header *>(pbt.environment.storage.get_address());
-    tendb::pbt::KeyValueItem::Iterator itr{pbt.environment.storage, header->begin_key_value_items_offset};
-    tendb::pbt::KeyValueItem::Iterator end{pbt.environment.storage, header->first_node_offset};
+    tendb::pbt::KeyValueItem::Iterator itr = pbt.begin();
+    tendb::pbt::KeyValueItem::Iterator end = pbt.end();
     volatile uint64_t total_size = 0;
     for (; itr != end; ++itr)
     {
@@ -143,7 +143,7 @@ void benchmark_read_all_sequential(uint32_t branch_factor)
     volatile uint64_t total_size = 0;
     for (const auto &key : keys)
     {
-        tendb::pbt::KeyValueItem *entry = pbt.get(key);
+        const tendb::pbt::KeyValueItem *entry = pbt.get(key);
         total_size += entry->value_size; // Do something with the value to prevent compiler optimizations
     }
     auto t2 = std::chrono::high_resolution_clock::now();
@@ -168,7 +168,7 @@ void benchmark_read_all_random(uint32_t branch_factor)
     volatile uint64_t total_size = 0; // Do something with the value to prevent compiler optimizations
     for (const auto &key : keys)
     {
-        tendb::pbt::KeyValueItem *entry = pbt.get(key);
+        const tendb::pbt::KeyValueItem *entry = pbt.get(key);
         total_size += entry->value_size;
     }
     auto t2 = std::chrono::high_resolution_clock::now();

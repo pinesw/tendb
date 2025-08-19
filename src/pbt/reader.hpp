@@ -29,13 +29,25 @@ namespace tendb::pbt
             return reinterpret_cast<KeyValueItem *>(reinterpret_cast<char *>(environment.storage.get_address()) + offset);
         }
 
-        KeyValueItem *get(const std::string_view &key) const
+        const KeyValueItem::Iterator begin() const
+        {
+            Header *header = get_header();
+            return KeyValueItem::Iterator{environment.storage, header->begin_key_value_items_offset};
+        }
+
+        const KeyValueItem::Iterator end() const
+        {
+            Header *header = get_header();
+            return KeyValueItem::Iterator{environment.storage, header->first_node_offset};
+        }
+
+        const KeyValueItem::Iterator seek(const std::string_view &key) const
         {
             Header *header = get_header();
 
             if (header->num_items == 0)
             {
-                return nullptr; // No items in the tree
+                return end();
             }
 
             uint64_t offset = header->root_offset;
@@ -62,7 +74,7 @@ namespace tendb::pbt
 
             if (offset == 0)
             {
-                return nullptr;
+                return end();
             }
 
             Node *leaf_node = get_node_at_offset(offset);
@@ -71,12 +83,21 @@ namespace tendb::pbt
             {
                 if (environment.options.compare_fn(key, child->key()) == 0)
                 {
-                    // Found the item
-                    return get_item_at_offset(child->offset);
+                    return KeyValueItem::Iterator{environment.storage, child->offset};
                 }
             }
 
-            return nullptr;
+            return end();
+        }
+
+        const KeyValueItem *get(const std::string_view &key) const
+        {
+            auto itr = seek(key);
+            if (itr == end())
+            {
+                return nullptr; // Key not found
+            }
+            return *itr;
         }
     };
 }
