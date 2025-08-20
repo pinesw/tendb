@@ -4,6 +4,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <map>
 #include <random>
 #include <string>
 #include <string_view>
@@ -131,6 +132,22 @@ void benchmark_iterate_all_sequential()
     std::cout << "benchmark_iterate_all_sequential: " << duration.count() << "μs" << std::endl;
 }
 
+void benchmark_write(uint32_t branch_factor)
+{
+    std::vector<std::string> keys = generate_keys_sequence(BENCHMARK_NUM_KEYS);
+    std::vector<std::string> values = generate_values_sequence(BENCHMARK_NUM_KEYS);
+
+    std::string path = "test.pbt";
+    tendb::pbt::PBT pbt(tendb::pbt::Options{branch_factor, tendb::pbt::compare_lexically, path});
+
+    auto t1 = std::chrono::high_resolution_clock::now();
+    write_test_data(pbt, keys, values);
+    auto t2 = std::chrono::high_resolution_clock::now();
+
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
+    std::cout << "benchmark_write(" << branch_factor << "): " << duration.count() << "μs" << std::endl;
+}
+
 void benchmark_read_all_sequential(uint32_t branch_factor)
 {
     std::vector<std::string> keys = generate_keys_sequence(BENCHMARK_NUM_KEYS);
@@ -178,14 +195,94 @@ void benchmark_read_all_random(uint32_t branch_factor)
     std::cout << "benchmark_read_all_random(" << branch_factor << "): " << duration.count() << "μs" << std::endl;
 }
 
+void benchmark_merge(uint32_t branch_factor)
+{
+    std::vector<std::string> keys = generate_keys_sequence(BENCHMARK_NUM_KEYS);
+    std::vector<std::string> values = generate_values_sequence(BENCHMARK_NUM_KEYS);
+
+    std::string path_a = "test_a.pbt";
+    tendb::pbt::PBT pbt_a(tendb::pbt::Options{branch_factor, tendb::pbt::compare_lexically, path_a});
+    write_test_data(pbt_a, keys, values);
+
+    std::string path_b = "test_b.pbt";
+    tendb::pbt::PBT pbt_b(tendb::pbt::Options{branch_factor, tendb::pbt::compare_lexically, path_b});
+    write_test_data(pbt_b, keys, values);
+
+    std::string path_target = "test_target.pbt";
+    tendb::pbt::PBT pbt_target(tendb::pbt::Options{branch_factor, tendb::pbt::compare_lexically, path_target});
+
+    auto t1 = std::chrono::high_resolution_clock::now();
+    tendb::pbt::PBT::merge(std::array<const tendb::pbt::PBT *, 2>{&pbt_a, &pbt_b}, pbt_target);
+    auto t2 = std::chrono::high_resolution_clock::now();
+
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
+    std::cout << "benchmark_merge(" << branch_factor << "): " << duration.count() << "μs" << std::endl;
+}
+
+void benchmark_map_read_all_sequential()
+{
+    std::vector<std::string> keys = generate_keys_sequence(BENCHMARK_NUM_KEYS);
+    std::vector<std::string> values = generate_values_sequence(BENCHMARK_NUM_KEYS);
+
+    std::map<std::string, std::string> map;
+    for (size_t i = 0; i < keys.size(); ++i)
+    {
+        map.emplace(keys[i], values[i]);
+    }
+
+    auto t1 = std::chrono::high_resolution_clock::now();
+    volatile uint64_t total_size = 0; // Do something with the value to prevent compiler optimizations
+    for (const auto &key : keys)
+    {
+        auto size = map.find(key)->second.size();
+        total_size += size;
+    }
+    auto t2 = std::chrono::high_resolution_clock::now();
+
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
+    std::cout << "benchmark_map_read_all_sequential: " << duration.count() << "μs" << std::endl;
+}
+
+void benchmark_map_read_all_random()
+{
+    std::vector<std::string> keys = generate_keys_sequence(BENCHMARK_NUM_KEYS);
+    std::vector<std::string> values = generate_values_sequence(BENCHMARK_NUM_KEYS);
+
+    std::map<std::string, std::string> map;
+    for (size_t i = 0; i < keys.size(); ++i)
+    {
+        map.emplace(keys[i], values[i]);
+    }
+
+    std::mt19937 g(0xC0FFEE);
+    std::shuffle(keys.begin(), keys.end(), g);
+
+    auto t1 = std::chrono::high_resolution_clock::now();
+    volatile uint64_t total_size = 0; // Do something with the value to prevent compiler optimizations
+    for (const auto &key : keys)
+    {
+        auto size = map.find(key)->second.size();
+        total_size += size;
+    }
+    auto t2 = std::chrono::high_resolution_clock::now();
+
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
+    std::cout << "benchmark_map_read_all_random: " << duration.count() << "μs" << std::endl;
+}
+
 int main()
 {
     test_write_and_read();
     test_merge();
 
     benchmark_iterate_all_sequential();
+    benchmark_write(8);
     benchmark_read_all_sequential(8);
     benchmark_read_all_random(8);
+    benchmark_merge(8);
+
+    benchmark_map_read_all_sequential();
+    benchmark_map_read_all_random();
 
     return 0;
 }
