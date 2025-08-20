@@ -21,6 +21,7 @@ namespace tendb::pbt
         PBT(const Options &opts = Options()) : environment(opts), reader(environment), writer(environment)
         {
             environment.storage.init();
+            writer.init();
         }
 
         void add(const std::string_view &key, const std::string_view &value)

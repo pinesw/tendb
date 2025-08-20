@@ -23,7 +23,9 @@ namespace tendb::pbt
         uint64_t begin_key_value_items_offset;
         uint64_t num_items;
 
-        Writer(Environment &environment) : environment(environment), appender(environment.storage)
+        Writer(Environment &environment) : environment(environment), appender(environment.storage) {}
+
+        void init()
         {
             appender.append_header();
             begin_key_value_items_offset = appender.get_offset();
@@ -92,10 +94,12 @@ namespace tendb::pbt
             requires std::same_as<std::ranges::range_value_t<T>, const Environment *>
         static void merge(const T &sources, Environment &target)
         {
+            Writer writer(target);
+            writer.init();
+
             uint64_t total_items = 0;
             std::vector<KeyValueItem::Iterator> iterators;
             std::vector<KeyValueItem::Iterator> ends;
-            Writer writer(target);
 
             for (const Environment *source : sources)
             {
