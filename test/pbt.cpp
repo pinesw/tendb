@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -85,7 +86,7 @@ void test_merge()
 
     std::string path_target = "test_target.pbt";
     tendb::pbt::PBT pbt_target(tendb::pbt::Options{8, tendb::pbt::compare_lexically, path_target});
-    tendb::pbt::PBT::merge(pbt_a, pbt_b, pbt_target);
+    tendb::pbt::PBT::merge(std::array<const tendb::pbt::PBT *, 2>{&pbt_a, &pbt_b}, pbt_target);
 
     for (size_t i = 0; i < TEST_NUM_KEYS; ++i)
     {

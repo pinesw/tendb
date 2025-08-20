@@ -2,7 +2,9 @@
 
 #include <cstdint>
 #include <functional>
+#include <ranges>
 #include <string_view>
+#include <vector>
 
 #include "pbt/environment.hpp"
 #include "pbt/reader.hpp"
@@ -31,9 +33,16 @@ namespace tendb::pbt
             writer.finish();
         }
 
-        static void merge(const PBT &source_a, const PBT &source_b, PBT &target)
+        template <std::ranges::random_access_range T>
+            requires std::same_as<std::ranges::range_value_t<T>, const PBT *>
+        static void merge(const T &sources, PBT &target)
         {
-            Writer::merge(source_a.environment, source_b.environment, target.environment);
+            std::vector<const Environment *> envs;
+            for (const auto &source : sources)
+            {
+                envs.push_back(&source->environment);
+            }
+            Writer::merge(envs, target.environment);
         }
 
         const KeyValueItem::Iterator begin() const

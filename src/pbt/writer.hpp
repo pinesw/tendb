@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <ranges>
 #include <string_view>
+#include <vector>
 
 #include "pbt/appender.hpp"
 #include "pbt/environment.hpp"
@@ -86,49 +88,43 @@ namespace tendb::pbt
             environment.storage.set_size(appender.get_offset());
         }
 
-        // TODO: add variadic merge (>= 2 sources)
-
-        static void merge(const Environment &source_a, const Environment &source_b, Environment &target)
+        template <std::ranges::random_access_range T>
+            requires std::same_as<std::ranges::range_value_t<T>, const Environment *>
+        static void merge(const T &sources, Environment &target)
         {
-            Header *header_a = reinterpret_cast<Header *>(source_a.storage.get_address());
-            Header *header_b = reinterpret_cast<Header *>(source_b.storage.get_address());
-            KeyValueItem::Iterator itr_a{source_a.storage, header_a->begin_key_value_items_offset};
-            KeyValueItem::Iterator itr_b{source_b.storage, header_b->begin_key_value_items_offset};
-            KeyValueItem::Iterator end_a{source_a.storage, header_a->first_node_offset};
-            KeyValueItem::Iterator end_b{source_b.storage, header_b->first_node_offset};
-
+            uint64_t total_items = 0;
+            std::vector<KeyValueItem::Iterator> iterators;
+            std::vector<KeyValueItem::Iterator> ends;
             Writer writer(target);
 
-            uint64_t total_items = header_a->num_items + header_b->num_items;
+            for (const Environment *source : sources)
+            {
+                Header *header = reinterpret_cast<Header *>(source->storage.get_address());
+                total_items += header->num_items;
+                iterators.emplace_back(source->storage, header->begin_key_value_items_offset);
+                ends.emplace_back(source->storage, header->first_node_offset);
+            }
+
             for (uint64_t i = 0; i < total_items; ++i)
             {
-                if (itr_a == end_a)
+                uint64_t min_index;
+                std::string_view min_key;
+
+                for (uint64_t j = 0; j < iterators.size(); ++j)
                 {
-                    const KeyValueItem *item_b = *itr_b;
-                    writer.add(item_b->key(), item_b->value());
-                    ++itr_b;
-                }
-                else if (itr_b == end_b)
-                {
-                    const KeyValueItem *item_a = *itr_a;
-                    writer.add(item_a->key(), item_a->value());
-                    ++itr_a;
-                }
-                else
-                {
-                    const KeyValueItem *item_a = *itr_a;
-                    const KeyValueItem *item_b = *itr_b;
-                    if (target.options.compare_fn(item_a->key(), item_b->key()) <= 0)
+                    if (iterators[j] == ends[j])
                     {
-                        writer.add(item_a->key(), item_a->value());
-                        ++itr_a;
+                        continue;
                     }
-                    else
+                    if (min_key.empty() || target.options.compare_fn((*iterators[j])->key(), min_key) < 0)
                     {
-                        writer.add(item_b->key(), item_b->value());
-                        ++itr_b;
+                        min_index = j;
+                        min_key = (*iterators[j])->key();
                     }
                 }
+
+                writer.add(min_key, (*iterators[min_index])->value());
+                ++iterators[min_index];
             }
 
             writer.finish();
