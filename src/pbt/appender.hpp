@@ -3,17 +3,17 @@
 #include <cstdint>
 #include <string_view>
 
+#include "pbt/environment.hpp"
 #include "pbt/format.hpp"
-#include "pbt/storage.hpp"
 
 namespace tendb::pbt
 {
     struct Appender
     {
-        Storage &storage;
+        Environment &environment;
         uint64_t offset;
 
-        Appender(Storage &storage) : storage(storage), offset(0) {}
+        Appender(Environment &environment) : environment(environment), offset(0) {}
 
         uint64_t get_offset() const
         {
@@ -22,15 +22,15 @@ namespace tendb::pbt
 
         void ensure_size(uint64_t size)
         {
-            if (storage.get_size() < offset + size)
+            if (environment.storage.get_size() < offset + size)
             {
-                storage.set_size(std::max(offset + size, 2 * storage.get_size()));
+                environment.storage.set_size(std::max(offset + size, 2 * environment.storage.get_size()));
             }
         }
 
         void *get_base() const
         {
-            return reinterpret_cast<char *>(storage.get_address()) + offset;
+            return reinterpret_cast<char *>(environment.storage.get_address()) + offset;
         }
 
         void append_header()
@@ -70,7 +70,6 @@ namespace tendb::pbt
             node->set_item_end(item_end);
             node->set_num_children(item_end - item_start);
             node->set_node_size(total_size);
-            node->set_aggregate_size(0); // TODO: write aggregate data
             node->set_items(item_end - item_start, itr);
 
             offset += total_size;
@@ -84,7 +83,6 @@ namespace tendb::pbt
             Node *node = reinterpret_cast<Node *>(get_base());
             node->set_num_children(child_end - child_start);
             node->set_node_size(total_size);
-            node->set_aggregate_size(0); // TODO: write aggregate data
             node->set_children(child_end - child_start, itr);
 
             offset += total_size;

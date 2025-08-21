@@ -23,7 +23,7 @@ namespace tendb::pbt
         uint64_t begin_key_value_items_offset;
         uint64_t num_items;
 
-        Writer(Environment &environment) : environment(environment), appender(environment.storage) {}
+        Writer(Environment &environment) : environment(environment), appender(environment) {}
 
         void init()
         {

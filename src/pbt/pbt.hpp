@@ -18,6 +18,8 @@ namespace tendb::pbt
         Reader reader;
         Writer writer;
 
+        // TODO: reader should get read-only storage
+
         PBT(const std::string &path, const Options &opts = Options()) : environment(path, opts), reader(environment), writer(environment)
         {
             environment.storage.init();
