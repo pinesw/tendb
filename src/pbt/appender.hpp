@@ -70,6 +70,7 @@ namespace tendb::pbt
             node->set_item_end(item_end);
             node->set_num_children(item_end - item_start);
             node->set_node_size(total_size);
+            node->set_aggregate_size(0); // TODO: write aggregate data
             node->set_items(item_end - item_start, itr);
 
             offset += total_size;
@@ -83,6 +84,7 @@ namespace tendb::pbt
             Node *node = reinterpret_cast<Node *>(get_base());
             node->set_num_children(child_end - child_start);
             node->set_node_size(total_size);
+            node->set_aggregate_size(0); // TODO: write aggregate data
             node->set_children(child_end - child_start, itr);
 
             offset += total_size;

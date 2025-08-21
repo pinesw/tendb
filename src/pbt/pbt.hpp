@@ -18,7 +18,7 @@ namespace tendb::pbt
         Reader reader;
         Writer writer;
 
-        PBT(const Options &opts = Options()) : environment(opts), reader(environment), writer(environment)
+        PBT(const std::string &path, const Options &opts = Options()) : environment(path, opts), reader(environment), writer(environment)
         {
             environment.storage.init();
             writer.init();

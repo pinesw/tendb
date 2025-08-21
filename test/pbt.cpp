@@ -51,7 +51,7 @@ void test_write_and_read()
     std::vector<std::string> values = generate_values_sequence(TEST_NUM_KEYS);
 
     std::string path = "test.pbt";
-    tendb::pbt::PBT pbt(tendb::pbt::Options{8, tendb::pbt::compare_lexically, path});
+    tendb::pbt::PBT pbt(path);
     write_test_data(pbt, keys, values);
 
     for (size_t i = 0; i < TEST_NUM_KEYS; ++i)
@@ -78,15 +78,15 @@ void test_merge()
     std::vector<std::string> values = generate_values_sequence(TEST_NUM_KEYS);
 
     std::string path_a = "test_a.pbt";
-    tendb::pbt::PBT pbt_a(tendb::pbt::Options{8, tendb::pbt::compare_lexically, path_a});
+    tendb::pbt::PBT pbt_a(path_a);
     write_test_data(pbt_a, keys, values);
 
     std::string path_b = "test_b.pbt";
-    tendb::pbt::PBT pbt_b(tendb::pbt::Options{8, tendb::pbt::compare_lexically, path_b});
+    tendb::pbt::PBT pbt_b(path_b);
     write_test_data(pbt_b, keys, values);
 
     std::string path_target = "test_target.pbt";
-    tendb::pbt::PBT pbt_target(tendb::pbt::Options{8, tendb::pbt::compare_lexically, path_target});
+    tendb::pbt::PBT pbt_target(path_target);
     tendb::pbt::PBT::merge(std::array<const tendb::pbt::PBT *, 2>{&pbt_a, &pbt_b}, pbt_target);
 
     for (size_t i = 0; i < TEST_NUM_KEYS; ++i)
@@ -113,7 +113,7 @@ void benchmark_iterate_all_sequential()
     std::vector<std::string> values = generate_values_sequence(BENCHMARK_NUM_KEYS);
 
     std::string path = "test.pbt";
-    tendb::pbt::PBT pbt(tendb::pbt::Options{8, tendb::pbt::compare_lexically, path});
+    tendb::pbt::PBT pbt(path);
     write_test_data(pbt, keys, values);
 
     auto t1 = std::chrono::high_resolution_clock::now();
@@ -138,7 +138,7 @@ void benchmark_write(uint32_t branch_factor)
     std::vector<std::string> values = generate_values_sequence(BENCHMARK_NUM_KEYS);
 
     std::string path = "test.pbt";
-    tendb::pbt::PBT pbt(tendb::pbt::Options{branch_factor, tendb::pbt::compare_lexically, path});
+    tendb::pbt::PBT pbt(path, tendb::pbt::Options{branch_factor, tendb::pbt::compare_lexically});
 
     auto t1 = std::chrono::high_resolution_clock::now();
     write_test_data(pbt, keys, values);
@@ -154,7 +154,7 @@ void benchmark_read_all_sequential(uint32_t branch_factor)
     std::vector<std::string> values = generate_values_sequence(BENCHMARK_NUM_KEYS);
 
     std::string path = "test.pbt";
-    tendb::pbt::PBT pbt(tendb::pbt::Options{branch_factor, tendb::pbt::compare_lexically, path});
+    tendb::pbt::PBT pbt(path, tendb::pbt::Options{branch_factor, tendb::pbt::compare_lexically});
     write_test_data(pbt, keys, values);
 
     auto t1 = std::chrono::high_resolution_clock::now();
@@ -176,7 +176,7 @@ void benchmark_read_all_random(uint32_t branch_factor)
     std::vector<std::string> values = generate_values_sequence(BENCHMARK_NUM_KEYS);
 
     std::string path = "test.pbt";
-    tendb::pbt::PBT pbt(tendb::pbt::Options{branch_factor, tendb::pbt::compare_lexically, path});
+    tendb::pbt::PBT pbt(path, tendb::pbt::Options{branch_factor, tendb::pbt::compare_lexically});
     write_test_data(pbt, keys, values);
 
     std::mt19937 g(0xC0FFEE);
@@ -201,15 +201,15 @@ void benchmark_merge(uint32_t branch_factor)
     std::vector<std::string> values = generate_values_sequence(BENCHMARK_NUM_KEYS);
 
     std::string path_a = "test_a.pbt";
-    tendb::pbt::PBT pbt_a(tendb::pbt::Options{branch_factor, tendb::pbt::compare_lexically, path_a});
+    tendb::pbt::PBT pbt_a(path_a, tendb::pbt::Options{branch_factor, tendb::pbt::compare_lexically});
     write_test_data(pbt_a, keys, values);
 
     std::string path_b = "test_b.pbt";
-    tendb::pbt::PBT pbt_b(tendb::pbt::Options{branch_factor, tendb::pbt::compare_lexically, path_b});
+    tendb::pbt::PBT pbt_b(path_b, tendb::pbt::Options{branch_factor, tendb::pbt::compare_lexically});
     write_test_data(pbt_b, keys, values);
 
     std::string path_target = "test_target.pbt";
-    tendb::pbt::PBT pbt_target(tendb::pbt::Options{branch_factor, tendb::pbt::compare_lexically, path_target});
+    tendb::pbt::PBT pbt_target(path_target, tendb::pbt::Options{branch_factor, tendb::pbt::compare_lexically});
 
     auto t1 = std::chrono::high_resolution_clock::now();
     tendb::pbt::PBT::merge(std::array<const tendb::pbt::PBT *, 2>{&pbt_a, &pbt_b}, pbt_target);

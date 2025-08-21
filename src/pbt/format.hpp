@@ -177,12 +177,13 @@ namespace tendb::pbt
     struct Node
     {
     private:
-        uint32_t depth;        // Depth of this node in the tree
-        uint32_t item_start;   // Index of first item covered by this node
-        uint32_t item_end;     // Index of last item covered by this node (exclusive)
-        uint32_t num_children; // Number of child nodes (if internal node) or child items (if leaf node)
-        uint32_t node_size;    // Size of this node in bytes
-        char data[1];          // Key sizes, keys, and child offsets (allocated dynamically)
+        uint32_t depth;          // Depth of this node in the tree
+        uint32_t item_start;     // Index of first item covered by this node
+        uint32_t item_end;       // Index of last item covered by this node (exclusive)
+        uint32_t num_children;   // Number of child nodes (if internal node) or child items (if leaf node)
+        uint32_t node_size;      // Size of this node in bytes
+        uint64_t aggregate_size; // Size of the aggregate data in this node
+        char data[1];            // Key sizes, keys, and child offsets (allocated dynamically)
 
         Node(const Node &) = delete;
         Node(Node &&) = delete;
@@ -215,14 +216,19 @@ namespace tendb::pbt
             node_size = size;
         }
 
+        void set_aggregate_size(uint64_t size)
+        {
+            aggregate_size = size;
+        }
+
         const ChildReference *first_child() const
         {
-            return reinterpret_cast<const ChildReference *>(data);
+            return reinterpret_cast<const ChildReference *>(data + aggregate_size);
         }
 
         const ChildReference::Iterator begin() const
         {
-            return ChildReference::Iterator(data, reinterpret_cast<const char *>(this) + node_size);
+            return ChildReference::Iterator(data + aggregate_size, reinterpret_cast<const char *>(this) + node_size);
         }
 
         const ChildReference::Iterator end() const
@@ -288,6 +294,10 @@ namespace tendb::pbt
         void set_items(uint32_t num_items, KeyValueItem::Iterator &itr)
         {
             uint64_t data_offset = 0;
+
+            // TODO: write aggregate data
+            data_offset += aggregate_size;
+
             for (uint32_t i = 0; i < num_items; ++i)
             {
                 uint64_t item_offset = itr.current_offset;
@@ -305,6 +315,10 @@ namespace tendb::pbt
         void set_children(uint32_t num_children, Node::Iterator &itr)
         {
             uint64_t data_offset = 0;
+
+            // TODO: write aggregate data
+            data_offset += aggregate_size;
+
             for (uint32_t i = 0; i < num_children; ++i)
             {
                 uint64_t child_offset = itr.current_offset;

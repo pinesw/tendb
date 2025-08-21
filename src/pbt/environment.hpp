@@ -19,14 +19,14 @@ namespace tendb::pbt
     {
         uint32_t branch_factor = 8;
         compare_fn_t compare_fn = compare_lexically;
-        std::string file_path = "default.pbt";
     };
 
     struct Environment
     {
+        std::string path = "default.pbt";
         Options options;
         Storage storage;
 
-        Environment(const Options &opts) : options(opts), storage(opts.file_path) {}
+        Environment(const std::string &path, const Options &opts) : path(path), options(opts), storage(path) {}
     };
 }
