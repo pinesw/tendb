@@ -65,11 +65,11 @@ namespace tendb::pbt
             ensure_size(total_size);
 
             Node *node = reinterpret_cast<Node *>(get_base());
-            node->depth = 0;
-            node->item_start = item_start;
-            node->item_end = item_end;
-            node->num_children = item_end - item_start;
-            node->node_size = total_size;
+            node->set_depth(0);
+            node->set_item_start(item_start);
+            node->set_item_end(item_end);
+            node->set_num_children(item_end - item_start);
+            node->set_node_size(total_size);
             node->set_items(item_end - item_start, itr);
 
             offset += total_size;
@@ -81,8 +81,8 @@ namespace tendb::pbt
             ensure_size(total_size);
 
             Node *node = reinterpret_cast<Node *>(get_base());
-            node->num_children = child_end - child_start;
-            node->node_size = total_size;
+            node->set_num_children(child_end - child_start);
+            node->set_node_size(total_size);
             node->set_children(child_end - child_start, itr);
 
             offset += total_size;

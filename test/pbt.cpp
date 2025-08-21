@@ -124,7 +124,7 @@ void benchmark_iterate_all_sequential()
     for (; itr != end; ++itr)
     {
         const tendb::pbt::KeyValueItem *item = *itr;
-        total_size += item->value_size; // Do something with the value to prevent compiler optimizations
+        total_size += item->value().size(); // Do something with the value to prevent compiler optimizations
     }
     auto t2 = std::chrono::high_resolution_clock::now();
 
@@ -161,8 +161,8 @@ void benchmark_read_all_sequential(uint32_t branch_factor)
     volatile uint64_t total_size = 0;
     for (const auto &key : keys)
     {
-        const tendb::pbt::KeyValueItem *entry = pbt.get(key);
-        total_size += entry->value_size; // Do something with the value to prevent compiler optimizations
+        const tendb::pbt::KeyValueItem *item = pbt.get(key);
+        total_size += item->value().size(); // Do something with the value to prevent compiler optimizations
     }
     auto t2 = std::chrono::high_resolution_clock::now();
 
@@ -186,8 +186,8 @@ void benchmark_read_all_random(uint32_t branch_factor)
     volatile uint64_t total_size = 0; // Do something with the value to prevent compiler optimizations
     for (const auto &key : keys)
     {
-        const tendb::pbt::KeyValueItem *entry = pbt.get(key);
-        total_size += entry->value_size;
+        const tendb::pbt::KeyValueItem *item = pbt.get(key);
+        total_size += item->value().size();
     }
     auto t2 = std::chrono::high_resolution_clock::now();
 

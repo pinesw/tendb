@@ -61,7 +61,7 @@ namespace tendb::pbt
                 {
                     if (environment.options.compare_fn(key, child->key()) >= 0)
                     {
-                        offset = child->offset;
+                        offset = child->get_offset();
                     }
                     else
                     {
@@ -83,7 +83,7 @@ namespace tendb::pbt
             {
                 if (environment.options.compare_fn(key, child->key()) == 0)
                 {
-                    return KeyValueItem::Iterator{environment.storage, child->offset};
+                    return KeyValueItem::Iterator{environment.storage, child->get_offset()};
                 }
             }
 

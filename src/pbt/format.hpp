@@ -29,6 +29,7 @@ namespace tendb::pbt
 #pragma pack(push, 1)
     struct KeyValueItem
     {
+    private:
         uint64_t key_size;   // Size of the key in bytes
         uint64_t value_size; // Size of the value in bytes
         char data[1];        // Key and value data (allocated dynamically)
@@ -38,6 +39,7 @@ namespace tendb::pbt
         KeyValueItem &operator=(const KeyValueItem &) = delete;
         KeyValueItem &operator=(KeyValueItem &&) = delete;
 
+    public:
         static uint64_t size_of(uint64_t key_size, uint64_t value_size)
         {
             return sizeof(KeyValueItem) + key_size + value_size - sizeof(data);
@@ -45,12 +47,12 @@ namespace tendb::pbt
 
         std::string_view key() const
         {
-            return std::string_view(reinterpret_cast<const char *>(data), key_size);
+            return std::string_view(data, key_size);
         }
 
         std::string_view value() const
         {
-            return std::string_view(reinterpret_cast<const char *>(data + key_size), value_size);
+            return std::string_view(data + key_size, value_size);
         }
 
         void set_key_value(const std::string_view &key, const std::string_view &value)
@@ -99,6 +101,7 @@ namespace tendb::pbt
 #pragma pack(push, 1)
     struct ChildReference
     {
+    private:
         uint64_t key_size; // Size of the key in bytes
         uint64_t offset;   // Offset of the child node or item in the file
         char data[1];      // Key data (allocated dynamically)
@@ -108,6 +111,7 @@ namespace tendb::pbt
         ChildReference &operator=(const ChildReference &) = delete;
         ChildReference &operator=(ChildReference &&) = delete;
 
+    public:
         static uint64_t size_of(uint64_t key_size)
         {
             return sizeof(ChildReference) + key_size - sizeof(data);
@@ -119,9 +123,19 @@ namespace tendb::pbt
             std::memcpy(data, key.data(), key_size);
         }
 
+        void set_offset(uint64_t offset_value)
+        {
+            offset = offset_value;
+        }
+
+        uint64_t get_offset() const
+        {
+            return offset;
+        }
+
         std::string_view key() const
         {
-            return std::string_view(reinterpret_cast<const char *>(data), key_size);
+            return std::string_view(data, key_size);
         }
 
         struct Iterator
@@ -162,17 +176,44 @@ namespace tendb::pbt
 #pragma pack(push, 1)
     struct Node
     {
-        uint32_t depth;         // Depth of this node in the tree
-        uint32_t item_start;    // Index of first item covered by this node
-        uint32_t item_end;      // Index of last item covered by this node (exclusive)
-        uint32_t num_children;  // Number of child nodes (if internal node) or child items (if leaf node)
-        uint32_t node_size;     // Size of this node in bytes
-        ChildReference data[1]; // Key sizes, keys, and child offsets (allocated dynamically)
+    private:
+        uint32_t depth;        // Depth of this node in the tree
+        uint32_t item_start;   // Index of first item covered by this node
+        uint32_t item_end;     // Index of last item covered by this node (exclusive)
+        uint32_t num_children; // Number of child nodes (if internal node) or child items (if leaf node)
+        uint32_t node_size;    // Size of this node in bytes
+        char data[1];          // Key sizes, keys, and child offsets (allocated dynamically)
 
         Node(const Node &) = delete;
         Node(Node &&) = delete;
         Node &operator=(const Node &) = delete;
         Node &operator=(Node &&) = delete;
+
+    public:
+        void set_depth(uint32_t d)
+        {
+            depth = d;
+        }
+
+        void set_item_start(uint32_t start)
+        {
+            item_start = start;
+        }
+
+        void set_item_end(uint32_t end)
+        {
+            item_end = end;
+        }
+
+        void set_num_children(uint32_t num)
+        {
+            num_children = num;
+        }
+
+        void set_node_size(uint32_t size)
+        {
+            node_size = size;
+        }
 
         const ChildReference *first_child() const
         {
@@ -181,7 +222,7 @@ namespace tendb::pbt
 
         const ChildReference::Iterator begin() const
         {
-            return ChildReference::Iterator(reinterpret_cast<const char *>(data), reinterpret_cast<const char *>(this) + node_size);
+            return ChildReference::Iterator(data, reinterpret_cast<const char *>(this) + node_size);
         }
 
         const ChildReference::Iterator end() const
@@ -253,8 +294,8 @@ namespace tendb::pbt
                 const KeyValueItem *item = *itr++;
                 std::string_view key = item->key();
 
-                ChildReference *child = reinterpret_cast<ChildReference *>(reinterpret_cast<char *>(data) + data_offset);
-                child->offset = item_offset;
+                ChildReference *child = reinterpret_cast<ChildReference *>(data + data_offset);
+                child->set_offset(item_offset);
                 child->set_key(key);
 
                 data_offset += ChildReference::size_of(key.size());
@@ -270,8 +311,8 @@ namespace tendb::pbt
                 const Node *child_node = *itr++;
 
                 std::string_view min_key = child_node->first_child()->key();
-                ChildReference *child = reinterpret_cast<ChildReference *>(reinterpret_cast<char *>(data) + data_offset);
-                child->offset = child_offset;
+                ChildReference *child = reinterpret_cast<ChildReference *>(data + data_offset);
+                child->set_offset(child_offset);
                 child->set_key(min_key);
 
                 data_offset += ChildReference::size_of(min_key.size());
