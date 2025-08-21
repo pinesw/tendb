@@ -7,7 +7,7 @@
 
 #include "pbt/appender.hpp"
 #include "pbt/environment.hpp"
-#include "pbt/formats.hpp"
+#include "pbt/format.hpp"
 
 namespace tendb::pbt
 {

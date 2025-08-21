@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <string_view>
 
-#include "pbt/formats.hpp"
+#include "pbt/format.hpp"
 #include "pbt/storage.hpp"
 
 namespace tendb::pbt
