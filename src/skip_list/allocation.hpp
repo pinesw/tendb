@@ -10,37 +10,10 @@
 
 #include "core_local.hpp"
 
-namespace tendb::allocation
+namespace tendb::skip_list
 {
-    typedef std::function<char *(size_t)> AllocateFunction;
     constexpr static size_t ALIGNMENT = alignof(std::max_align_t);
     static thread_local size_t cpu_id = core_local::access_index();
-
-    struct ConcurrentMalloc
-    {
-    private:
-        std::mutex mutex;
-        std::deque<std::unique_ptr<char[]>> blocks;
-
-        char *new_block(size_t requested_size)
-        {
-            char *block = new char[requested_size];
-
-            mutex.lock();
-            blocks.emplace_back(std::unique_ptr<char[]>(block));
-            mutex.unlock();
-
-            return block;
-        }
-
-    public:
-        char *allocate(size_t requested_size)
-        {
-            assert(requested_size > 0 && "Allocation size must be greater than zero");
-
-            return new_block(requested_size);
-        }
-    };
 
     struct BlockAllocator
     {
@@ -140,36 +113,6 @@ namespace tendb::allocation
 
             char *address = shard->allocator.allocate(requested_size);
             shard->mutex.unlock();
-            return address;
-        }
-    };
-
-    struct FixedSizeArena
-    {
-    private:
-        std::unique_ptr<char[]> memory;
-        char *current_begin;
-        size_t remaining_size;
-
-    public:
-        FixedSizeArena(size_t size)
-        {
-            assert(size > 0 && "Arena size must be greater than zero");
-
-            memory = std::make_unique<char[]>(size);
-            current_begin = memory.get();
-            remaining_size = size;
-        }
-
-        char *allocate(size_t requested_size)
-        {
-            assert(requested_size > 0 && "Allocation size must be greater than zero");
-            assert(requested_size <= remaining_size && "Allocation exceeds arena size");
-
-            char *address = current_begin;
-            current_begin += requested_size;
-            remaining_size -= requested_size;
-
             return address;
         }
     };

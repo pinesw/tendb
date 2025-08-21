@@ -10,7 +10,7 @@
 #include <random>
 #include <string_view>
 
-#include "allocation.hpp"
+#include "skip_list/allocation.hpp"
 
 namespace tendb::skip_list
 {
@@ -187,7 +187,7 @@ namespace tendb::skip_list
 
         // Allocator to manage memory for nodes and data
         // Using the CoreLocalShardAllocator gives performant multi-threaded allocations
-        allocation::CoreLocalShardAllocator allocator;
+        CoreLocalShardAllocator allocator;
 
     public:
         SkipList()

@@ -9,5 +9,5 @@ include_directories(src)
 # Find dependencies
 find_package(Boost REQUIRED)
 
-add_executable(${PROJECT_NAME} test/pbt.cpp)
+add_executable(${PROJECT_NAME} test/skip_list.cpp)
 target_link_libraries(${PROJECT_NAME} boost::boost)
