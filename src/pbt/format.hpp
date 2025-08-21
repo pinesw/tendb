@@ -276,7 +276,7 @@ namespace tendb::pbt
 
         static uint64_t size_of(uint32_t num_children, Node::Iterator itr)
         {
-            uint64_t total_size = sizeof(Node) - sizeof(ChildReference); // -1 for the first ChildReference
+            uint64_t total_size = sizeof(Node) - sizeof(data);
             for (uint32_t i = 0; i < num_children; ++i)
             {
                 const Node *child_node = *itr++;
