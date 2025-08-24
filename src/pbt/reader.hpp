@@ -11,9 +11,11 @@ namespace tendb::pbt
 {
     struct Reader
     {
+    private:
         const Storage &storage;
         const Options &options;
 
+    public:
         Reader(const Storage &storage, const Options &options) : storage(storage), options(options) {}
 
         Header *get_header() const
@@ -21,6 +23,7 @@ namespace tendb::pbt
             return reinterpret_cast<Header *>(storage.get_address());
         }
 
+    private:
         Node *get_node_at_offset(uint64_t offset) const
         {
             return reinterpret_cast<Node *>(reinterpret_cast<char *>(storage.get_address()) + offset);
@@ -31,6 +34,7 @@ namespace tendb::pbt
             return reinterpret_cast<KeyValueItem *>(reinterpret_cast<char *>(storage.get_address()) + offset);
         }
 
+    public:
         const KeyValueItem::Iterator begin() const
         {
             Header *header = get_header();

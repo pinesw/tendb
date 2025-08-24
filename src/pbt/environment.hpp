@@ -45,10 +45,10 @@ namespace tendb::pbt
 
             for (const auto *source : sources)
             {
-                Header *header = reinterpret_cast<Header *>(source->storage.get_address());
+                Header *header = source->get_header();
                 total_items += header->num_items;
-                iterators.emplace_back(source->storage, header->begin_key_value_items_offset);
-                ends.emplace_back(source->storage, header->first_node_offset);
+                iterators.emplace_back(source->begin());
+                ends.emplace_back(source->end());
             }
 
             for (uint64_t i = 0; i < total_items; ++i)
@@ -62,7 +62,7 @@ namespace tendb::pbt
                     {
                         continue;
                     }
-                    if (min_key.empty() || target.options.compare_fn((*iterators[j])->key(), min_key) < 0)
+                    if (min_key.empty() || target.get_options().compare_fn((*iterators[j])->key(), min_key) < 0)
                     {
                         min_index = j;
                         min_key = (*iterators[j])->key();

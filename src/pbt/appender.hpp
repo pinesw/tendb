@@ -10,9 +10,11 @@ namespace tendb::pbt
 {
     struct Appender
     {
+    private:
         Storage &storage;
         uint64_t offset;
 
+    public:
         Appender(Storage &storage) : storage(storage), offset(0) {}
 
         uint64_t get_offset() const
@@ -20,6 +22,7 @@ namespace tendb::pbt
             return offset;
         }
 
+    private:
         void ensure_size(uint64_t size)
         {
             if (storage.get_size() < offset + size)
@@ -33,6 +36,7 @@ namespace tendb::pbt
             return reinterpret_cast<char *>(storage.get_address()) + offset;
         }
 
+    public:
         void append_header()
         {
             ensure_size(sizeof(Header));

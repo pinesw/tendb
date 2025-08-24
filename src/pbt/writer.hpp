@@ -19,12 +19,14 @@ namespace tendb::pbt
 
     struct Writer
     {
+    private:
         Storage &storage;
         const Options &options;
         Appender appender;
         uint64_t begin_key_value_items_offset;
         uint64_t num_items;
 
+    public:
         Writer(Storage &storage, const Options &options) : storage(storage), appender(storage), options(options)
         {
             appender.append_header();
@@ -32,9 +34,16 @@ namespace tendb::pbt
             num_items = 0;
         }
 
+    private:
         Header *get_header() const
         {
             return reinterpret_cast<Header *>(storage.get_address());
+        }
+
+    public:
+        const Options &get_options()
+        {
+            return options;
         }
 
         void add(const std::string_view &key, const std::string_view &value)

@@ -14,6 +14,7 @@ namespace tendb::pbt
 {
     struct Storage
     {
+    private:
         static constexpr uint64_t initial_file_size = 1024 * 1024; // 1 MB
 
         std::string path;
@@ -22,6 +23,7 @@ namespace tendb::pbt
         bool read_only;
         uint64_t file_size;
 
+    public:
         Storage(const std::string &path, bool read_only)
             : path(path), mapping(nullptr), region(nullptr), read_only(read_only), file_size(0)
         {
@@ -41,6 +43,7 @@ namespace tendb::pbt
         Storage(Storage &&) = delete;
         Storage &operator=(Storage &&) = delete;
 
+    private:
         void init()
         {
             if (!std::filesystem::exists(path))
@@ -92,6 +95,7 @@ namespace tendb::pbt
             file_size = size;
         }
 
+    public:
         uint64_t get_size() const
         {
             return file_size;
