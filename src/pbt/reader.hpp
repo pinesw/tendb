@@ -41,6 +41,56 @@ namespace tendb::pbt
             return KeyValueItem::Iterator{environment.storage, header->first_node_offset};
         }
 
+        const KeyValueItem::Iterator seek(size_t index) const
+        {
+            Header *header = get_header();
+
+            if (header->num_items == 0)
+            {
+                return end();
+            }
+
+            uint64_t offset = header->root_offset;
+            uint32_t depth = header->depth;
+            while (depth > 0 && offset != 0)
+            {
+                Node *node = get_node_at_offset(offset);
+                offset = 0;
+
+                for (const auto *child : *node)
+                {
+                    if (index >= child->get_num_items())
+                    {
+                        index -= child->get_num_items();
+                    }
+                    else
+                    {
+                        offset = child->get_offset();
+                        break;
+                    }
+                }
+
+                --depth;
+            }
+
+            if (offset == 0)
+            {
+                return end();
+            }
+
+            Node *leaf_node = get_node_at_offset(offset);
+            for (const auto *child : *leaf_node)
+            {
+                if (index == 0)
+                {
+                    return KeyValueItem::Iterator{environment.storage, child->get_offset()};
+                }
+                --index;
+            }
+
+            return end();
+        }
+
         const KeyValueItem::Iterator seek(const std::string_view &key) const
         {
             Header *header = get_header();
@@ -78,7 +128,6 @@ namespace tendb::pbt
             }
 
             Node *leaf_node = get_node_at_offset(offset);
-
             for (const auto *child : *leaf_node)
             {
                 if (environment.options.compare_fn(key, child->key()) == 0)
@@ -96,6 +145,16 @@ namespace tendb::pbt
             if (itr == end())
             {
                 return nullptr; // Key not found
+            }
+            return *itr;
+        }
+
+        const KeyValueItem *get_at(size_t index) const
+        {
+            auto itr = seek(index);
+            if (itr == end())
+            {
+                return nullptr; // Index out of bounds
             }
             return *itr;
         }

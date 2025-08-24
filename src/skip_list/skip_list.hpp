@@ -541,7 +541,15 @@ namespace tendb::skip_list
         {
             ZoneScoped;
 
-            return node != nullptr && key.compare(node->get_data()->key()) >= 0;
+            if (node == nullptr)
+            {
+                return false;
+            }
+
+            return key.compare(node->get_data()->key()) >= 0;
+
+            // const std::string_view node_key = node->get_data()->key();
+            // return *(key.data()) >= *(node_key.data()) && key.compare(node_key) >= 0;
         }
     };
 }

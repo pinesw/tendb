@@ -67,5 +67,10 @@ namespace tendb::pbt
         {
             return reader.get(key);
         }
+
+        const KeyValueItem *get_at(size_t index) const
+        {
+            return reader.get_at(index);
+        }
     };
 }

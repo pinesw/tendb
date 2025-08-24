@@ -102,9 +102,10 @@ namespace tendb::pbt
     struct ChildReference
     {
     private:
-        uint64_t key_size; // Size of the key in bytes
-        uint64_t offset;   // Offset of the child node or item in the file
-        char data[1];      // Key data (allocated dynamically)
+        uint64_t key_size;  // Size of the key in bytes
+        uint64_t offset;    // Offset of the child node or item in the file
+        uint64_t num_items; // Number of items under this child (only for internal nodes)
+        char data[1];       // Key data (allocated dynamically)
 
         // TODO: include aggregate data, for internal nodes
 
@@ -125,6 +126,11 @@ namespace tendb::pbt
             std::memcpy(data, key.data(), key_size);
         }
 
+        std::string_view key() const
+        {
+            return std::string_view(data, key_size);
+        }
+
         void set_offset(uint64_t offset_value)
         {
             offset = offset_value;
@@ -135,9 +141,14 @@ namespace tendb::pbt
             return offset;
         }
 
-        std::string_view key() const
+        void set_num_items(uint64_t num)
         {
-            return std::string_view(data, key_size);
+            num_items = num;
+        }
+
+        uint64_t get_num_items() const
+        {
+            return num_items;
         }
 
         struct Iterator
@@ -179,12 +190,12 @@ namespace tendb::pbt
     struct Node
     {
     private:
-        uint32_t depth;          // Depth of this node in the tree
-        uint32_t item_start;     // Index of first item covered by this node
-        uint32_t item_end;       // Index of last item covered by this node (exclusive)
-        uint32_t num_children;   // Number of child nodes (if internal node) or child items (if leaf node)
-        uint32_t node_size;      // Size of this node in bytes
-        char data[1];            // Key sizes, keys, and child offsets (allocated dynamically)
+        uint32_t depth;        // Depth of this node in the tree
+        uint32_t item_start;   // Index of first item covered by this node
+        uint32_t item_end;     // Index of last item covered by this node (exclusive)
+        uint32_t num_children; // Number of child nodes (if internal node) or child items (if leaf node)
+        uint32_t node_size;    // Size of this node in bytes
+        char data[1];          // Key sizes, keys, and child offsets (allocated dynamically)
 
         Node(const Node &) = delete;
         Node(Node &&) = delete;
@@ -215,6 +226,16 @@ namespace tendb::pbt
         void set_node_size(uint32_t size)
         {
             node_size = size;
+        }
+
+        uint32_t get_item_start() const
+        {
+            return item_start;
+        }
+
+        uint32_t get_item_end() const
+        {
+            return item_end;
         }
 
         const ChildReference *first_child() const
@@ -299,6 +320,7 @@ namespace tendb::pbt
                 ChildReference *child = reinterpret_cast<ChildReference *>(data + data_offset);
                 child->set_offset(item_offset);
                 child->set_key(key);
+                child->set_num_items(1); // Leaf nodes always have 1 item per child
 
                 data_offset += ChildReference::size_of(key.size());
             }
@@ -316,6 +338,7 @@ namespace tendb::pbt
                 ChildReference *child = reinterpret_cast<ChildReference *>(data + data_offset);
                 child->set_offset(child_offset);
                 child->set_key(min_key);
+                child->set_num_items(child_node->item_end - child_node->item_start);
 
                 data_offset += ChildReference::size_of(min_key.size());
 

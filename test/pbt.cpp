@@ -72,6 +72,33 @@ void test_write_and_read()
     std::cout << "test_write_and_read done" << std::endl;
 }
 
+void test_get_at()
+{
+    std::vector<std::string> keys = generate_keys_sequence(TEST_NUM_KEYS);
+    std::vector<std::string> values = generate_values_sequence(TEST_NUM_KEYS);
+
+    std::string path = "test.pbt";
+    tendb::pbt::PBT pbt(path);
+    write_test_data(pbt, keys, values);
+
+    for (size_t i = 0; i < TEST_NUM_KEYS; ++i)
+    {
+        const tendb::pbt::KeyValueItem *entry = pbt.get_at(i);
+        if (!entry)
+        {
+            std::cerr << "Entry not found for key: " << keys[i] << std::endl;
+            exit(1);
+        }
+        if (entry->key() != keys[i])
+        {
+            std::cerr << "Key mismatch at index: " << i << ", expected: " << keys[i] << ", got: " << entry->key() << std::endl;
+            exit(1);
+        }
+    }
+
+    std::cout << "test_get_at done" << std::endl;
+}
+
 void test_merge()
 {
     std::vector<std::string> keys = generate_keys_sequence(TEST_NUM_KEYS);
@@ -273,6 +300,7 @@ void benchmark_map_read_all_random()
 int main()
 {
     test_write_and_read();
+    test_get_at();
     test_merge();
 
     benchmark_iterate_all_sequential();
