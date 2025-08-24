@@ -3,17 +3,17 @@
 #include <cstdint>
 #include <string_view>
 
-#include "pbt/environment.hpp"
 #include "pbt/format.hpp"
+#include "pbt/storage.hpp"
 
 namespace tendb::pbt
 {
     struct Appender
     {
-        Environment &environment;
+        Storage &storage;
         uint64_t offset;
 
-        Appender(Environment &environment) : environment(environment), offset(0) {}
+        Appender(Storage &storage) : storage(storage), offset(0) {}
 
         uint64_t get_offset() const
         {
@@ -22,15 +22,15 @@ namespace tendb::pbt
 
         void ensure_size(uint64_t size)
         {
-            if (environment.storage.get_size() < offset + size)
+            if (storage.get_size() < offset + size)
             {
-                environment.storage.set_size(std::max(offset + size, 2 * environment.storage.get_size()));
+                storage.set_size(std::max(offset + size, 2 * storage.get_size()));
             }
         }
 
         void *get_base() const
         {
-            return reinterpret_cast<char *>(environment.storage.get_address()) + offset;
+            return reinterpret_cast<char *>(storage.get_address()) + offset;
         }
 
         void append_header()

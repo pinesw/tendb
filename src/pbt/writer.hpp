@@ -6,8 +6,9 @@
 #include <vector>
 
 #include "pbt/appender.hpp"
-#include "pbt/environment.hpp"
 #include "pbt/format.hpp"
+#include "pbt/options.hpp"
+#include "pbt/storage.hpp"
 
 namespace tendb::pbt
 {
@@ -18,14 +19,13 @@ namespace tendb::pbt
 
     struct Writer
     {
-        Environment &environment;
+        Storage &storage;
+        const Options &options;
         Appender appender;
         uint64_t begin_key_value_items_offset;
         uint64_t num_items;
 
-        Writer(Environment &environment) : environment(environment), appender(environment) {}
-
-        void init()
+        Writer(Storage &storage, const Options &options) : storage(storage), appender(storage), options(options)
         {
             appender.append_header();
             begin_key_value_items_offset = appender.get_offset();
@@ -34,7 +34,7 @@ namespace tendb::pbt
 
         Header *get_header() const
         {
-            return reinterpret_cast<Header *>(environment.storage.get_address());
+            return reinterpret_cast<Header *>(storage.get_address());
         }
 
         void add(const std::string_view &key, const std::string_view &value)
@@ -45,20 +45,20 @@ namespace tendb::pbt
 
         void finish()
         {
-            uint64_t num_leaf_nodes = div_ceil(num_items, environment.options.branch_factor);
+            uint64_t num_leaf_nodes = div_ceil(num_items, options.branch_factor);
             uint64_t first_node_offset = appender.get_offset();
 
             get_header()->first_node_offset = first_node_offset;
             get_header()->begin_key_value_items_offset = begin_key_value_items_offset;
 
-            tendb::pbt::KeyValueItem::Iterator kv_itr{environment.storage, begin_key_value_items_offset};
-            tendb::pbt::Node::Iterator node_itr{environment.storage, first_node_offset};
+            tendb::pbt::KeyValueItem::Iterator kv_itr{storage, begin_key_value_items_offset};
+            tendb::pbt::Node::Iterator node_itr{storage, first_node_offset};
 
             uint64_t last_node_offset = 0;
-            for (uint64_t i = 0; i < num_items; i += environment.options.branch_factor)
+            for (uint64_t i = 0; i < num_items; i += options.branch_factor)
             {
                 uint32_t item_start = static_cast<uint32_t>(i);
-                uint32_t item_end = static_cast<uint32_t>(std::min(i + environment.options.branch_factor, num_items));
+                uint32_t item_end = static_cast<uint32_t>(std::min(i + options.branch_factor, num_items));
                 last_node_offset = appender.get_offset();
                 appender.append_leaf_node(item_start, item_end, kv_itr);
             }
@@ -68,15 +68,15 @@ namespace tendb::pbt
             uint32_t depth = 0;
             while (prev_depth_num_nodes > 1)
             {
-                for (size_t i = 0; i < prev_depth_num_nodes; i += environment.options.branch_factor)
+                for (size_t i = 0; i < prev_depth_num_nodes; i += options.branch_factor)
                 {
                     uint32_t child_start = static_cast<uint32_t>(i);
-                    uint32_t child_end = static_cast<uint32_t>(std::min(i + environment.options.branch_factor, prev_depth_num_nodes));
+                    uint32_t child_end = static_cast<uint32_t>(std::min(i + options.branch_factor, prev_depth_num_nodes));
                     last_node_offset = appender.get_offset();
                     appender.append_internal_node(child_start, child_end, node_itr);
                 }
 
-                prev_depth_num_nodes = div_ceil(prev_depth_num_nodes, environment.options.branch_factor);
+                prev_depth_num_nodes = div_ceil(prev_depth_num_nodes, options.branch_factor);
                 num_internal_nodes += prev_depth_num_nodes;
                 ++depth;
             }
@@ -87,51 +87,7 @@ namespace tendb::pbt
             get_header()->num_items = num_items;
             get_header()->root_offset = last_node_offset;
 
-            environment.storage.set_size(appender.get_offset());
-        }
-
-        template <std::ranges::random_access_range T>
-            requires std::same_as<std::ranges::range_value_t<T>, const Environment *>
-        static void merge(const T &sources, Environment &target)
-        {
-            Writer writer(target);
-            writer.init();
-
-            uint64_t total_items = 0;
-            std::vector<KeyValueItem::Iterator> iterators;
-            std::vector<KeyValueItem::Iterator> ends;
-
-            for (const Environment *source : sources)
-            {
-                Header *header = reinterpret_cast<Header *>(source->storage.get_address());
-                total_items += header->num_items;
-                iterators.emplace_back(source->storage, header->begin_key_value_items_offset);
-                ends.emplace_back(source->storage, header->first_node_offset);
-            }
-
-            for (uint64_t i = 0; i < total_items; ++i)
-            {
-                uint64_t min_index;
-                std::string_view min_key;
-
-                for (uint64_t j = 0; j < iterators.size(); ++j)
-                {
-                    if (iterators[j] == ends[j])
-                    {
-                        continue;
-                    }
-                    if (min_key.empty() || target.options.compare_fn((*iterators[j])->key(), min_key) < 0)
-                    {
-                        min_index = j;
-                        min_key = (*iterators[j])->key();
-                    }
-                }
-
-                writer.add(min_key, (*iterators[min_index])->value());
-                ++iterators[min_index];
-            }
-
-            writer.finish();
+            storage.set_size(appender.get_offset());
         }
     };
 }

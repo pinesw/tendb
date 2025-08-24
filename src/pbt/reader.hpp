@@ -3,42 +3,44 @@
 #include <cstdint>
 #include <string_view>
 
-#include "pbt/environment.hpp"
 #include "pbt/format.hpp"
+#include "pbt/options.hpp"
+#include "pbt/storage.hpp"
 
 namespace tendb::pbt
 {
     struct Reader
     {
-        const Environment &environment;
+        const Storage &storage;
+        const Options &options;
 
-        Reader(const Environment &environment) : environment(environment) {}
+        Reader(const Storage &storage, const Options &options) : storage(storage), options(options) {}
 
         Header *get_header() const
         {
-            return reinterpret_cast<Header *>(environment.storage.get_address());
+            return reinterpret_cast<Header *>(storage.get_address());
         }
 
         Node *get_node_at_offset(uint64_t offset) const
         {
-            return reinterpret_cast<Node *>(reinterpret_cast<char *>(environment.storage.get_address()) + offset);
+            return reinterpret_cast<Node *>(reinterpret_cast<char *>(storage.get_address()) + offset);
         }
 
         KeyValueItem *get_item_at_offset(uint64_t offset) const
         {
-            return reinterpret_cast<KeyValueItem *>(reinterpret_cast<char *>(environment.storage.get_address()) + offset);
+            return reinterpret_cast<KeyValueItem *>(reinterpret_cast<char *>(storage.get_address()) + offset);
         }
 
         const KeyValueItem::Iterator begin() const
         {
             Header *header = get_header();
-            return KeyValueItem::Iterator{environment.storage, header->begin_key_value_items_offset};
+            return KeyValueItem::Iterator{storage, header->begin_key_value_items_offset};
         }
 
         const KeyValueItem::Iterator end() const
         {
             Header *header = get_header();
-            return KeyValueItem::Iterator{environment.storage, header->first_node_offset};
+            return KeyValueItem::Iterator{storage, header->first_node_offset};
         }
 
         const KeyValueItem::Iterator seek(size_t index) const
@@ -83,7 +85,7 @@ namespace tendb::pbt
             {
                 if (index == 0)
                 {
-                    return KeyValueItem::Iterator{environment.storage, child->get_offset()};
+                    return KeyValueItem::Iterator{storage, child->get_offset()};
                 }
                 --index;
             }
@@ -109,7 +111,7 @@ namespace tendb::pbt
 
                 for (const auto *child : *node)
                 {
-                    if (environment.options.compare_fn(key, child->key()) >= 0)
+                    if (options.compare_fn(key, child->key()) >= 0)
                     {
                         offset = child->get_offset();
                     }
@@ -130,9 +132,9 @@ namespace tendb::pbt
             Node *leaf_node = get_node_at_offset(offset);
             for (const auto *child : *leaf_node)
             {
-                if (environment.options.compare_fn(key, child->key()) == 0)
+                if (options.compare_fn(key, child->key()) == 0)
                 {
-                    return KeyValueItem::Iterator{environment.storage, child->get_offset()};
+                    return KeyValueItem::Iterator{storage, child->get_offset()};
                 }
             }
 

@@ -19,10 +19,14 @@ namespace tendb::pbt
         std::string path;
         boost::interprocess::file_mapping *mapping;
         boost::interprocess::mapped_region *region;
+        bool read_only;
         uint64_t file_size;
 
-        Storage(const std::string &path)
-            : path(path), mapping(nullptr), region(nullptr), file_size(0) {}
+        Storage(const std::string &path, bool read_only)
+            : path(path), mapping(nullptr), region(nullptr), read_only(read_only), file_size(0)
+        {
+            init();
+        }
 
         ~Storage()
         {
@@ -62,8 +66,16 @@ namespace tendb::pbt
 
         void map_file()
         {
-            mapping = new boost::interprocess::file_mapping(path.c_str(), boost::interprocess::read_write);
-            region = new boost::interprocess::mapped_region(*mapping, boost::interprocess::read_write);
+            if (read_only)
+            {
+                mapping = new boost::interprocess::file_mapping(path.c_str(), boost::interprocess::read_only);
+                region = new boost::interprocess::mapped_region(*mapping, boost::interprocess::read_only);
+            }
+            else
+            {
+                mapping = new boost::interprocess::file_mapping(path.c_str(), boost::interprocess::read_write);
+                region = new boost::interprocess::mapped_region(*mapping, boost::interprocess::read_write);
+            }
         }
 
         void unmap_file()
@@ -94,6 +106,18 @@ namespace tendb::pbt
 
             unmap_file();
             set_file_size(size);
+            map_file();
+        }
+
+        void set_read_only(bool ro)
+        {
+            if (ro == read_only)
+            {
+                return; // No change needed
+            }
+
+            unmap_file();
+            read_only = ro;
             map_file();
         }
 
