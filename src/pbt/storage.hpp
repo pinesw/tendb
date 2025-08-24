@@ -123,11 +123,7 @@ namespace tendb::pbt
 
         void *get_address() const
         {
-            if (region)
-            {
-                return region->get_address();
-            }
-            return nullptr;
+            return region->get_address();
         }
     };
 }
