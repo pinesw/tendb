@@ -15,19 +15,23 @@ namespace tendb::pbt
 {
     struct Environment
     {
+    private:
         const std::string path;
         const Options options;
         Storage storage;
 
+    public:
         Environment(const std::string &path, const Options &opts = Options()) : path(path), options(opts), storage(path, false) {}
 
-        const Reader reader() const
+        const Reader reader()
         {
+            storage.set_read_only(true);
             return Reader(storage, options);
         }
 
         Writer writer()
         {
+            storage.set_read_only(false);
             return Writer(storage, options);
         }
 
