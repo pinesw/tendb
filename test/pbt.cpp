@@ -121,7 +121,7 @@ void test_merge()
     tendb::pbt::Environment env_target(path_target);
     tendb::pbt::Writer writer_target = env_target.writer();
     std::array<const tendb::pbt::Reader *, 2> reader_sources = {&reader_a, &reader_b};
-    tendb::pbt::Environment::merge(reader_sources.data(), 2, writer_target);
+    tendb::pbt::Environment::merge(reader_sources.data(), reader_sources.size(), writer_target);
     tendb::pbt::Reader reader_target = env_target.reader();
 
     for (size_t i = 0; i < TEST_NUM_KEYS; ++i)
@@ -253,7 +253,7 @@ void benchmark_merge(uint32_t branch_factor)
     std::array<const tendb::pbt::Reader *, 2> reader_sources{&reader_a, &reader_b};
 
     auto t1 = std::chrono::high_resolution_clock::now();
-    tendb::pbt::Environment::merge(reader_sources.data(), 2, writer_target);
+    tendb::pbt::Environment::merge(reader_sources.data(), reader_sources.size(), writer_target);
     auto t2 = std::chrono::high_resolution_clock::now();
 
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
