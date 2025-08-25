@@ -1,9 +1,10 @@
 #include <cstdint>
 #include <string_view>
 
-#include "pbt/appender.hpp"
 #include "pbt/format.hpp"
 #include "pbt/storage.hpp"
+
+#include "pbt/appender.hpp"
 
 void tendb::pbt::Appender::ensure_size(uint64_t size)
 {
