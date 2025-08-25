@@ -1,11 +1,7 @@
 #pragma once
 
-#include <filesystem>
-#include <fstream>
-#include <functional>
-#include <iostream>
+#include <cstdint>
 #include <iterator>
-#include <string>
 #include <string_view>
 
 #include "pbt/storage.hpp"
@@ -40,60 +36,28 @@ namespace tendb::pbt
         KeyValueItem &operator=(KeyValueItem &&) = delete;
 
     public:
-        static uint64_t size_of(uint64_t key_size, uint64_t value_size)
-        {
-            return sizeof(KeyValueItem) + key_size + value_size - sizeof(data);
-        }
-
-        std::string_view key() const
-        {
-            return std::string_view(data, key_size);
-        }
-
-        std::string_view value() const
-        {
-            return std::string_view(data + key_size, value_size);
-        }
-
-        void set_key_value(const std::string_view &key, const std::string_view &value)
-        {
-            key_size = key.size();
-            value_size = value.size();
-            std::memcpy(data, key.data(), key_size);
-            std::memcpy(data + key_size, value.data(), value_size);
-        }
+        static uint64_t size_of(uint64_t key_size, uint64_t value_size);
+        std::string_view key() const;
+        std::string_view value() const;
+        void set_key_value(const std::string_view &key, const std::string_view &value);
 
         struct Iterator
         {
+        private:
             const Storage &storage;
             uint64_t current_offset;
 
             using iterator_category = std::input_iterator_tag;
             using difference_type = std::ptrdiff_t;
 
-            const KeyValueItem *operator*() const
-            {
-                return reinterpret_cast<const KeyValueItem *>(reinterpret_cast<const char *>(storage.get_address()) + current_offset);
-            }
+        public:
+            Iterator(const Storage &storage, uint64_t offset);
 
-            Iterator &operator++()
-            {
-                const KeyValueItem *item = operator*();
-                current_offset += KeyValueItem::size_of(item->key_size, item->value_size);
-                return *this;
-            }
-
-            Iterator operator++(int)
-            {
-                Iterator temp = *this;
-                ++(*this);
-                return temp;
-            }
-
-            bool operator==(const Iterator &other) const
-            {
-                return current_offset == other.current_offset;
-            }
+            const KeyValueItem *operator*() const;
+            Iterator &operator++();
+            Iterator operator++(int);
+            bool operator==(const Iterator &other) const;
+            uint64_t get_offset() const;
         };
     };
 #pragma pack(pop)
@@ -115,73 +79,30 @@ namespace tendb::pbt
         ChildReference &operator=(ChildReference &&) = delete;
 
     public:
-        static uint64_t size_of(uint64_t key_size)
-        {
-            return sizeof(ChildReference) + key_size - sizeof(data);
-        }
-
-        void set_key(const std::string_view &key)
-        {
-            key_size = key.size();
-            std::memcpy(data, key.data(), key_size);
-        }
-
-        std::string_view key() const
-        {
-            return std::string_view(data, key_size);
-        }
-
-        void set_offset(uint64_t offset_value)
-        {
-            offset = offset_value;
-        }
-
-        uint64_t get_offset() const
-        {
-            return offset;
-        }
-
-        void set_num_items(uint64_t num)
-        {
-            num_items = num;
-        }
-
-        uint64_t get_num_items() const
-        {
-            return num_items;
-        }
+        static uint64_t size_of(uint64_t key_size);
+        void set_key(const std::string_view &key);
+        std::string_view key() const;
+        void set_offset(uint64_t offset_value);
+        uint64_t get_offset() const;
+        void set_num_items(uint64_t num);
+        uint64_t get_num_items() const;
 
         struct Iterator
         {
+        private:
             const char *current;
             const char *end;
 
             using iterator_category = std::input_iterator_tag;
             using difference_type = std::ptrdiff_t;
 
-            const ChildReference *operator*() const
-            {
-                return reinterpret_cast<const ChildReference *>(current);
-            }
+        public:
+            Iterator(const char *start, const char *end);
 
-            Iterator &operator++()
-            {
-                const ChildReference *child = operator*();
-                current += ChildReference::size_of(child->key_size);
-                return *this;
-            }
-
-            Iterator operator++(int)
-            {
-                Iterator temp = *this;
-                ++(*this);
-                return temp;
-            }
-
-            bool operator==(const Iterator &other) const
-            {
-                return current == other.current;
-            }
+            const ChildReference *operator*() const;
+            Iterator &operator++();
+            Iterator operator++(int);
+            bool operator==(const Iterator &other) const;
         };
     };
 #pragma pack(pop)
@@ -203,156 +124,40 @@ namespace tendb::pbt
         Node &operator=(Node &&) = delete;
 
     public:
-        void set_depth(uint32_t d)
-        {
-            depth = d;
-        }
-
-        void set_item_start(uint32_t start)
-        {
-            item_start = start;
-        }
-
-        void set_item_end(uint32_t end)
-        {
-            item_end = end;
-        }
-
-        void set_num_children(uint32_t num)
-        {
-            num_children = num;
-        }
-
-        void set_node_size(uint32_t size)
-        {
-            node_size = size;
-        }
-
-        uint32_t get_item_start() const
-        {
-            return item_start;
-        }
-
-        uint32_t get_item_end() const
-        {
-            return item_end;
-        }
-
-        const ChildReference *first_child() const
-        {
-            return reinterpret_cast<const ChildReference *>(data);
-        }
-
-        const ChildReference::Iterator begin() const
-        {
-            return ChildReference::Iterator(data, reinterpret_cast<const char *>(this) + node_size);
-        }
-
-        const ChildReference::Iterator end() const
-        {
-            return ChildReference::Iterator(reinterpret_cast<const char *>(this) + node_size, reinterpret_cast<const char *>(this) + node_size);
-        }
+        void set_depth(uint32_t d);
+        void set_item_end(uint32_t end);
+        void set_item_start(uint32_t start);
+        void set_num_children(uint32_t num);
+        void set_node_size(uint32_t size);
+        uint32_t get_item_start() const;
+        uint32_t get_item_end() const;
+        const ChildReference *first_child() const;
+        const ChildReference::Iterator begin() const;
+        const ChildReference::Iterator end() const;
 
         struct Iterator
         {
+        private:
             const Storage &storage;
             uint64_t current_offset;
 
             using iterator_category = std::input_iterator_tag;
             using difference_type = std::ptrdiff_t;
 
-            const Node *operator*() const
-            {
-                return reinterpret_cast<const Node *>(reinterpret_cast<const char *>(storage.get_address()) + current_offset);
-            }
+        public:
+            Iterator(const Storage &storage, uint64_t offset);
 
-            Iterator &operator++()
-            {
-                const Node *node = operator*();
-                current_offset += node->node_size;
-                return *this;
-            }
-
-            Iterator operator++(int)
-            {
-                Iterator temp = *this;
-                ++(*this);
-                return temp;
-            }
-
-            bool operator==(const Iterator &other) const
-            {
-                return current_offset == other.current_offset;
-            }
+            const Node *operator*() const;
+            Iterator &operator++();
+            Iterator operator++(int);
+            bool operator==(const Iterator &other) const;
+            uint64_t get_offset() const;
         };
 
-        static uint64_t size_of(uint32_t num_items, KeyValueItem::Iterator itr)
-        {
-            uint64_t total_size = sizeof(Node) - sizeof(data);
-            for (uint32_t i = 0; i < num_items; ++i)
-            {
-                const KeyValueItem *item = *itr++;
-                total_size += ChildReference::size_of(item->key().size());
-            }
-            return total_size;
-        }
-
-        static uint64_t size_of(uint32_t num_children, Node::Iterator itr)
-        {
-            uint64_t total_size = sizeof(Node) - sizeof(data);
-            for (uint32_t i = 0; i < num_children; ++i)
-            {
-                const Node *child_node = *itr++;
-                total_size += ChildReference::size_of(child_node->first_child()->key().size());
-            }
-            return total_size;
-        }
-
-        void set_items(uint32_t num_items, KeyValueItem::Iterator &itr)
-        {
-            uint64_t data_offset = 0;
-            for (uint32_t i = 0; i < num_items; ++i)
-            {
-                uint64_t item_offset = itr.current_offset;
-                const KeyValueItem *item = *itr++;
-                std::string_view key = item->key();
-
-                ChildReference *child = reinterpret_cast<ChildReference *>(data + data_offset);
-                child->set_offset(item_offset);
-                child->set_key(key);
-                child->set_num_items(1); // Leaf nodes always have 1 item per child
-
-                data_offset += ChildReference::size_of(key.size());
-            }
-        }
-
-        void set_children(uint32_t num_children, Node::Iterator &itr)
-        {
-            uint64_t data_offset = 0;
-            for (uint32_t i = 0; i < num_children; ++i)
-            {
-                uint64_t child_offset = itr.current_offset;
-                const Node *child_node = *itr++;
-
-                std::string_view min_key = child_node->first_child()->key();
-                ChildReference *child = reinterpret_cast<ChildReference *>(data + data_offset);
-                child->set_offset(child_offset);
-                child->set_key(min_key);
-                child->set_num_items(child_node->item_end - child_node->item_start);
-
-                data_offset += ChildReference::size_of(min_key.size());
-
-                depth = std::max(depth, child_node->depth + 1);
-                if (i == 0)
-                {
-                    item_start = child_node->item_start;
-                }
-                if (i == num_children - 1)
-                {
-                    item_end = child_node->item_end;
-                }
-            }
-        }
+        static uint64_t size_of(uint32_t num_items, KeyValueItem::Iterator itr);
+        static uint64_t size_of(uint32_t num_children, Node::Iterator itr);
+        void set_items(uint32_t num_items, KeyValueItem::Iterator &itr);
+        void set_children(uint32_t num_children, Node::Iterator &itr);
     };
 #pragma pack(pop)
 }

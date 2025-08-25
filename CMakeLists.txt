@@ -9,5 +9,5 @@ include_directories(src)
 # Find dependencies
 find_package(Boost REQUIRED)
 
-add_executable(${PROJECT_NAME} test/pbt.cpp)
+add_executable(${PROJECT_NAME} test/pbt.cpp src/pbt/appender.cpp src/pbt/format.cpp src/pbt/reader.cpp src/pbt/storage.cpp src/pbt/writer.cpp)
 target_link_libraries(${PROJECT_NAME} boost::boost)

@@ -16,7 +16,7 @@ namespace tendb::pbt
     //     requires std::same_as<std::ranges::range_value_t<T>, const PBT *>
     // static void merge(const T &sources, PBT &target);
 
-    compare_fn_t compare_lexically = [](const std::string_view &a, const std::string_view &b)
+    static compare_fn_t compare_lexically = [](const std::string_view &a, const std::string_view &b)
     {
         return a.compare(b);
     };
