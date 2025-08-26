@@ -167,29 +167,29 @@ void benchmark_iterate_all_sequential()
     std::cout << "benchmark_iterate_all_sequential: " << duration.count() << "μs" << std::endl;
 }
 
-void benchmark_write(uint32_t branch_factor)
+void benchmark_write()
 {
     std::vector<std::string> keys = generate_keys_sequence(BENCHMARK_NUM_KEYS);
     std::vector<std::string> values = generate_values_sequence(BENCHMARK_NUM_KEYS);
 
     std::string path = "test.pbt";
-    tendb::pbt::Environment env(path, tendb::pbt::Options{branch_factor, tendb::pbt::compare_lexically});
+    tendb::pbt::Environment env(path);
 
     auto t1 = std::chrono::high_resolution_clock::now();
     write_test_data(env, keys, values);
     auto t2 = std::chrono::high_resolution_clock::now();
 
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
-    std::cout << "benchmark_write(" << branch_factor << "): " << duration.count() << "μs" << std::endl;
+    std::cout << "benchmark_write: " << duration.count() << "μs" << std::endl;
 }
 
-void benchmark_read_all_sequential(uint32_t branch_factor)
+void benchmark_read_all_sequential()
 {
     std::vector<std::string> keys = generate_keys_sequence(BENCHMARK_NUM_KEYS);
     std::vector<std::string> values = generate_values_sequence(BENCHMARK_NUM_KEYS);
 
     std::string path = "test.pbt";
-    tendb::pbt::Environment env(path, tendb::pbt::Options{branch_factor, tendb::pbt::compare_lexically});
+    tendb::pbt::Environment env(path);
     write_test_data(env, keys, values);
     tendb::pbt::Reader reader = env.reader();
 
@@ -203,16 +203,16 @@ void benchmark_read_all_sequential(uint32_t branch_factor)
     auto t2 = std::chrono::high_resolution_clock::now();
 
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
-    std::cout << "benchmark_read_all_sequential(" << branch_factor << "): " << duration.count() << "μs" << std::endl;
+    std::cout << "benchmark_read_all_sequential: " << duration.count() << "μs" << std::endl;
 }
 
-void benchmark_read_all_random(uint32_t branch_factor)
+void benchmark_read_all_random()
 {
     std::vector<std::string> keys = generate_keys_sequence(BENCHMARK_NUM_KEYS);
     std::vector<std::string> values = generate_values_sequence(BENCHMARK_NUM_KEYS);
 
     std::string path = "test.pbt";
-    tendb::pbt::Environment env(path, tendb::pbt::Options{branch_factor, tendb::pbt::compare_lexically});
+    tendb::pbt::Environment env(path);
     write_test_data(env, keys, values);
     tendb::pbt::Reader reader = env.reader();
 
@@ -229,26 +229,26 @@ void benchmark_read_all_random(uint32_t branch_factor)
     auto t2 = std::chrono::high_resolution_clock::now();
 
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
-    std::cout << "benchmark_read_all_random(" << branch_factor << "): " << duration.count() << "μs" << std::endl;
+    std::cout << "benchmark_read_all_random: " << duration.count() << "μs" << std::endl;
 }
 
-void benchmark_merge(uint32_t branch_factor)
+void benchmark_merge()
 {
     std::vector<std::string> keys = generate_keys_sequence(BENCHMARK_NUM_KEYS);
     std::vector<std::string> values = generate_values_sequence(BENCHMARK_NUM_KEYS);
 
     std::string path_a = "test_a.pbt";
-    tendb::pbt::Environment env_a(path_a, tendb::pbt::Options{branch_factor, tendb::pbt::compare_lexically});
+    tendb::pbt::Environment env_a(path_a);
     write_test_data(env_a, keys, values);
     tendb::pbt::Reader reader_a = env_a.reader();
 
     std::string path_b = "test_b.pbt";
-    tendb::pbt::Environment env_b(path_b, tendb::pbt::Options{branch_factor, tendb::pbt::compare_lexically});
+    tendb::pbt::Environment env_b(path_b);
     write_test_data(env_b, keys, values);
     tendb::pbt::Reader reader_b = env_b.reader();
 
     std::string path_target = "test_target.pbt";
-    tendb::pbt::Environment env_target(path_target, tendb::pbt::Options{branch_factor, tendb::pbt::compare_lexically});
+    tendb::pbt::Environment env_target(path_target);
     tendb::pbt::Writer writer_target = env_target.writer();
     std::array<const tendb::pbt::Reader *, 2> reader_sources{&reader_a, &reader_b};
 
@@ -257,7 +257,7 @@ void benchmark_merge(uint32_t branch_factor)
     auto t2 = std::chrono::high_resolution_clock::now();
 
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
-    std::cout << "benchmark_merge(" << branch_factor << "): " << duration.count() << "μs" << std::endl;
+    std::cout << "benchmark_merge: " << duration.count() << "μs" << std::endl;
 }
 
 void benchmark_map_read_all_sequential()
@@ -318,10 +318,10 @@ int main()
     test_merge();
 
     benchmark_iterate_all_sequential();
-    benchmark_write(8);
-    benchmark_read_all_sequential(8);
-    benchmark_read_all_random(8);
-    benchmark_merge(8);
+    benchmark_write();
+    benchmark_read_all_sequential();
+    benchmark_read_all_random();
+    benchmark_merge();
 
     benchmark_map_read_all_sequential();
     benchmark_map_read_all_random();
