@@ -105,7 +105,7 @@ void tendb::pbt::Environment::merge(const Reader **readers, size_t num_readers, 
     for (size_t i = 0; i < num_readers; ++i)
     {
         const Reader *source = readers[i];
-        Header *header = source->get_header();
+        const Header *header = source->get_header();
         total_items += header->num_items;
         iterators.emplace_back(source->begin());
         ends.emplace_back(source->end());
@@ -425,26 +425,26 @@ tendb::pbt::KeyValueItem *tendb::pbt::Reader::get_item_at_offset(uint64_t offset
 
 tendb::pbt::Reader::Reader(const Storage &storage, const Options &options) : storage(storage), options(options) {}
 
-tendb::pbt::Header *tendb::pbt::Reader::get_header() const
+const tendb::pbt::Header *tendb::pbt::Reader::get_header() const
 {
     return reinterpret_cast<Header *>(storage.get_address());
 }
 
 const tendb::pbt::KeyValueItem::Iterator tendb::pbt::Reader::begin() const
 {
-    Header *header = get_header();
+    const Header *header = get_header();
     return KeyValueItem::Iterator(storage, header->begin_key_value_items_offset);
 }
 
 const tendb::pbt::KeyValueItem::Iterator tendb::pbt::Reader::end() const
 {
-    Header *header = get_header();
+    const Header *header = get_header();
     return KeyValueItem::Iterator(storage, header->first_node_offset);
 }
 
 const tendb::pbt::KeyValueItem::Iterator tendb::pbt::Reader::seek(size_t index) const
 {
-    Header *header = get_header();
+    const Header *header = get_header();
 
     if (header->num_items == 0)
     {
@@ -494,7 +494,7 @@ const tendb::pbt::KeyValueItem::Iterator tendb::pbt::Reader::seek(size_t index) 
 
 const tendb::pbt::KeyValueItem::Iterator tendb::pbt::Reader::seek(const std::string_view &key) const
 {
-    Header *header = get_header();
+    const Header *header = get_header();
 
     if (header->num_items == 0)
     {
@@ -659,16 +659,16 @@ void *tendb::pbt::Storage::get_address() const
     return region->get_address();
 }
 
+tendb::pbt::Header *tendb::pbt::Writer::get_header() const
+{
+    return reinterpret_cast<Header *>(storage.get_address());
+}
+
 tendb::pbt::Writer::Writer(Storage &storage, const Options &options) : storage(storage), appender(storage), options(options)
 {
     appender.append_header();
     begin_key_value_items_offset = appender.get_offset();
     num_items = 0;
-}
-
-tendb::pbt::Header *tendb::pbt::Writer::get_header() const
-{
-    return reinterpret_cast<Header *>(storage.get_address());
 }
 
 const tendb::pbt::Options &tendb::pbt::Writer::get_options()

@@ -20,9 +20,8 @@ namespace tendb::pbt
 
     public:
         Reader(const Storage &storage, const Options &options);
-        Header *get_header() const;
 
-    public:
+        const Header *get_header() const;
         const KeyValueItem::Iterator begin() const;
         const KeyValueItem::Iterator end() const;
         const KeyValueItem::Iterator seek(size_t index) const;

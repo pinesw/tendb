@@ -19,13 +19,11 @@ namespace tendb::pbt
         uint64_t begin_key_value_items_offset;
         uint64_t num_items;
 
-    public:
-        Writer(Storage &storage, const Options &options);
-
-    private:
         Header *get_header() const;
 
     public:
+        Writer(Storage &storage, const Options &options);
+
         const Options &get_options();
         void add(const std::string_view &key, const std::string_view &value);
         void finish();
