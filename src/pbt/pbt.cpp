@@ -14,6 +14,11 @@
 #include "pbt/storage.hpp"
 #include "pbt/writer.hpp"
 
+static uint64_t div_ceil(uint64_t x, uint64_t y)
+{
+    return (x + y - 1) / y;
+}
+
 void tendb::pbt::Appender::ensure_size(uint64_t size)
 {
     if (storage.get_size() < offset + size)
@@ -652,11 +657,6 @@ void tendb::pbt::Storage::set_read_only(bool ro)
 void *tendb::pbt::Storage::get_address() const
 {
     return region->get_address();
-}
-
-static uint64_t div_ceil(uint64_t x, uint64_t y)
-{
-    return (x + y - 1) / y;
 }
 
 tendb::pbt::Writer::Writer(Storage &storage, const Options &options) : storage(storage), appender(storage), options(options)
