@@ -13,8 +13,8 @@ namespace tendb::pbt
     struct Writer
     {
     private:
-        Storage &storage;
-        const Options &options;
+        Storage storage;
+        const Options options;
         Appender appender;
         uint64_t begin_key_value_items_offset;
         uint64_t num_items;
@@ -22,10 +22,11 @@ namespace tendb::pbt
         Header *get_header() const;
 
     public:
-        Writer(Storage &storage, const Options &options);
+        Writer(const std::string &path, const Options &opts = Options());
 
         const Options &get_options();
         void add(const std::string_view &key, const std::string_view &value);
+        void merge(const Reader **readers, size_t num_readers);
         void finish();
     };
 }

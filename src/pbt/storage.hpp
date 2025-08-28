@@ -40,5 +40,6 @@ namespace tendb::pbt
         void set_size(uint64_t size);
         void set_read_only(bool ro);
         void *get_address() const;
+        void flush() const;
     };
 }

@@ -7,7 +7,6 @@
 #include <string_view>
 
 #include "pbt/appender.hpp"
-#include "pbt/environment.hpp"
 #include "pbt/format.hpp"
 #include "pbt/options.hpp"
 #include "pbt/reader.hpp"
@@ -92,60 +91,6 @@ void tendb::pbt::Appender::append_internal_node(uint32_t child_start, uint32_t c
     node->set_children(child_end - child_start, itr);
 
     offset += total_size;
-}
-
-tendb::pbt::Environment::Environment(const std::string &path, const Options &opts) : path(path), options(opts), storage(path, false) {}
-
-void tendb::pbt::Environment::merge(const Reader **readers, size_t num_readers, Writer &target)
-{
-    uint64_t total_items = 0;
-    std::vector<KeyValueItem::Iterator> iterators;
-    std::vector<KeyValueItem::Iterator> ends;
-
-    for (size_t i = 0; i < num_readers; ++i)
-    {
-        const Reader *source = readers[i];
-        const Header *header = source->get_header();
-        total_items += header->num_items;
-        iterators.emplace_back(source->begin());
-        ends.emplace_back(source->end());
-    }
-
-    for (uint64_t i = 0; i < total_items; ++i)
-    {
-        uint64_t min_index;
-        std::string_view min_key;
-
-        for (uint64_t j = 0; j < iterators.size(); ++j)
-        {
-            if (iterators[j] == ends[j])
-            {
-                continue;
-            }
-            if (min_key.empty() || target.get_options().compare_fn((*iterators[j])->key(), min_key) < 0)
-            {
-                min_index = j;
-                min_key = (*iterators[j])->key();
-            }
-        }
-
-        target.add(min_key, (*iterators[min_index])->value());
-        ++iterators[min_index];
-    }
-
-    target.finish();
-}
-
-const tendb::pbt::Reader tendb::pbt::Environment::reader()
-{
-    storage.set_read_only(true);
-    return Reader(storage, options);
-}
-
-tendb::pbt::Writer tendb::pbt::Environment::writer()
-{
-    storage.set_read_only(false);
-    return Writer(storage, options);
 }
 
 uint64_t tendb::pbt::KeyValueItem::size_of(uint64_t key_size, uint64_t value_size)
@@ -423,7 +368,7 @@ tendb::pbt::KeyValueItem *tendb::pbt::Reader::get_item_at_offset(uint64_t offset
     return reinterpret_cast<KeyValueItem *>(reinterpret_cast<char *>(storage.get_address()) + offset);
 }
 
-tendb::pbt::Reader::Reader(const Storage &storage, const Options &options) : storage(storage), options(options) {}
+tendb::pbt::Reader::Reader(const std::string &path, const Options &opts) : storage(path, true), options(opts) {}
 
 const tendb::pbt::Header *tendb::pbt::Reader::get_header() const
 {
@@ -564,10 +509,17 @@ void tendb::pbt::Storage::init()
 {
     if (!std::filesystem::exists(path))
     {
+        if (read_only)
+        {
+            throw std::runtime_error("File does not exist: " + path);
+        }
         create_file();
     }
 
-    set_size(initial_file_size);
+    if (!read_only)
+    {
+        set_size(initial_file_size);
+    }
 
     if (!mapping)
     {
@@ -632,6 +584,10 @@ uint64_t tendb::pbt::Storage::get_size() const
 
 void tendb::pbt::Storage::set_size(uint64_t size)
 {
+    if (read_only)
+    {
+        throw std::runtime_error("Cannot set size on read-only storage");
+    }
     if (size == file_size)
     {
         return; // No change needed
@@ -659,12 +615,20 @@ void *tendb::pbt::Storage::get_address() const
     return region->get_address();
 }
 
+void tendb::pbt::Storage::flush() const
+{
+    if (region)
+    {
+        region->flush();
+    }
+}
+
 tendb::pbt::Header *tendb::pbt::Writer::get_header() const
 {
     return reinterpret_cast<Header *>(storage.get_address());
 }
 
-tendb::pbt::Writer::Writer(Storage &storage, const Options &options) : storage(storage), appender(storage), options(options)
+tendb::pbt::Writer::Writer(const std::string &path, const Options &opts) : storage(path, false), appender(storage), options(opts)
 {
     appender.append_header();
     begin_key_value_items_offset = appender.get_offset();
@@ -680,6 +644,46 @@ void tendb::pbt::Writer::add(const std::string_view &key, const std::string_view
 {
     appender.append_item(key, value);
     ++num_items;
+}
+
+void tendb::pbt::Writer::merge(const Reader **readers, size_t num_readers)
+{
+    uint64_t total_items = 0;
+    std::vector<KeyValueItem::Iterator> iterators;
+    std::vector<KeyValueItem::Iterator> ends;
+
+    for (size_t i = 0; i < num_readers; ++i)
+    {
+        const Reader *source = readers[i];
+        const Header *header = source->get_header();
+        total_items += header->num_items;
+        iterators.emplace_back(source->begin());
+        ends.emplace_back(source->end());
+    }
+
+    for (uint64_t i = 0; i < total_items; ++i)
+    {
+        uint64_t min_index;
+        std::string_view min_key;
+
+        for (uint64_t j = 0; j < iterators.size(); ++j)
+        {
+            if (iterators[j] == ends[j])
+            {
+                continue;
+            }
+            if (min_key.empty() || options.compare_fn((*iterators[j])->key(), min_key) < 0)
+            {
+                min_index = j;
+                min_key = (*iterators[j])->key();
+            }
+        }
+
+        add(min_key, (*iterators[min_index])->value());
+        ++iterators[min_index];
+    }
+
+    finish();
 }
 
 void tendb::pbt::Writer::finish()
@@ -726,5 +730,6 @@ void tendb::pbt::Writer::finish()
     get_header()->num_items = num_items;
     get_header()->root_offset = last_node_offset;
 
+    storage.flush();
     storage.set_size(appender.get_offset());
 }

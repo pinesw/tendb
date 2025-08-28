@@ -9,7 +9,8 @@
 #include <string>
 #include <string_view>
 
-#include "pbt/environment.hpp"
+#include "pbt/reader.hpp"
+#include "pbt/writer.hpp"
 
 constexpr static size_t TEST_NUM_KEYS = 100;
 constexpr static size_t BENCHMARK_NUM_KEYS = 100000;
@@ -36,9 +37,8 @@ std::vector<std::string> generate_values_sequence(uint64_t count)
     return values;
 }
 
-void write_test_data(tendb::pbt::Environment &env, const std::vector<std::string> &keys, const std::vector<std::string> &values)
+void write_test_data(tendb::pbt::Writer &writer, const std::vector<std::string> &keys, const std::vector<std::string> &values)
 {
-    tendb::pbt::Writer writer = env.writer();
     for (size_t i = 0; i < keys.size(); ++i)
     {
         writer.add(keys[i], values[i]);
@@ -52,9 +52,9 @@ void test_write_and_read()
     std::vector<std::string> values = generate_values_sequence(TEST_NUM_KEYS);
 
     std::string path = "test.pbt";
-    tendb::pbt::Environment env(path);
-    write_test_data(env, keys, values);
-    tendb::pbt::Reader reader = env.reader();
+    tendb::pbt::Writer writer(path);
+    write_test_data(writer, keys, values);
+    tendb::pbt::Reader reader(path);
 
     for (size_t i = 0; i < TEST_NUM_KEYS; ++i)
     {
@@ -80,9 +80,9 @@ void test_get_at()
     std::vector<std::string> values = generate_values_sequence(TEST_NUM_KEYS);
 
     std::string path = "test.pbt";
-    tendb::pbt::Environment env(path);
-    write_test_data(env, keys, values);
-    tendb::pbt::Reader reader = env.reader();
+    tendb::pbt::Writer writer(path);
+    write_test_data(writer, keys, values);
+    tendb::pbt::Reader reader(path);
 
     for (size_t i = 0; i < TEST_NUM_KEYS; ++i)
     {
@@ -108,21 +108,20 @@ void test_merge()
     std::vector<std::string> values = generate_values_sequence(TEST_NUM_KEYS);
 
     std::string path_a = "test_a.pbt";
-    tendb::pbt::Environment env_a(path_a);
-    write_test_data(env_a, keys, values);
-    tendb::pbt::Reader reader_a = env_a.reader();
+    tendb::pbt::Writer writer_a(path_a);
+    write_test_data(writer_a, keys, values);
+    tendb::pbt::Reader reader_a(path_a);
 
     std::string path_b = "test_b.pbt";
-    tendb::pbt::Environment env_b(path_b);
-    write_test_data(env_b, keys, values);
-    tendb::pbt::Reader reader_b = env_b.reader();
+    tendb::pbt::Writer writer_b(path_b);
+    write_test_data(writer_b, keys, values);
+    tendb::pbt::Reader reader_b(path_b);
 
     std::string path_target = "test_target.pbt";
-    tendb::pbt::Environment env_target(path_target);
-    tendb::pbt::Writer writer_target = env_target.writer();
+    tendb::pbt::Writer writer_target(path_target);
     std::array<const tendb::pbt::Reader *, 2> reader_sources = {&reader_a, &reader_b};
-    tendb::pbt::Environment::merge(reader_sources.data(), reader_sources.size(), writer_target);
-    tendb::pbt::Reader reader_target = env_target.reader();
+    writer_target.merge(reader_sources.data(), reader_sources.size());
+    tendb::pbt::Reader reader_target(path_target);
 
     for (size_t i = 0; i < TEST_NUM_KEYS; ++i)
     {
@@ -148,9 +147,9 @@ void benchmark_iterate_all_sequential()
     std::vector<std::string> values = generate_values_sequence(BENCHMARK_NUM_KEYS);
 
     std::string path = "test.pbt";
-    tendb::pbt::Environment env(path);
-    write_test_data(env, keys, values);
-    tendb::pbt::Reader reader = env.reader();
+    tendb::pbt::Writer writer(path);
+    write_test_data(writer, keys, values);
+    tendb::pbt::Reader reader(path);
 
     auto t1 = std::chrono::high_resolution_clock::now();
     tendb::pbt::KeyValueItem::Iterator itr = reader.begin();
@@ -173,10 +172,10 @@ void benchmark_write()
     std::vector<std::string> values = generate_values_sequence(BENCHMARK_NUM_KEYS);
 
     std::string path = "test.pbt";
-    tendb::pbt::Environment env(path);
+    tendb::pbt::Writer writer(path);
 
     auto t1 = std::chrono::high_resolution_clock::now();
-    write_test_data(env, keys, values);
+    write_test_data(writer, keys, values);
     auto t2 = std::chrono::high_resolution_clock::now();
 
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
@@ -189,9 +188,9 @@ void benchmark_read_all_sequential()
     std::vector<std::string> values = generate_values_sequence(BENCHMARK_NUM_KEYS);
 
     std::string path = "test.pbt";
-    tendb::pbt::Environment env(path);
-    write_test_data(env, keys, values);
-    tendb::pbt::Reader reader = env.reader();
+    tendb::pbt::Writer writer(path);
+    write_test_data(writer, keys, values);
+    tendb::pbt::Reader reader(path);
 
     auto t1 = std::chrono::high_resolution_clock::now();
     volatile uint64_t total_size = 0;
@@ -212,9 +211,9 @@ void benchmark_read_all_random()
     std::vector<std::string> values = generate_values_sequence(BENCHMARK_NUM_KEYS);
 
     std::string path = "test.pbt";
-    tendb::pbt::Environment env(path);
-    write_test_data(env, keys, values);
-    tendb::pbt::Reader reader = env.reader();
+    tendb::pbt::Writer writer(path);
+    write_test_data(writer, keys, values);
+    tendb::pbt::Reader reader(path);
 
     std::mt19937 g(0xC0FFEE);
     std::shuffle(keys.begin(), keys.end(), g);
@@ -238,22 +237,21 @@ void benchmark_merge()
     std::vector<std::string> values = generate_values_sequence(BENCHMARK_NUM_KEYS);
 
     std::string path_a = "test_a.pbt";
-    tendb::pbt::Environment env_a(path_a);
-    write_test_data(env_a, keys, values);
-    tendb::pbt::Reader reader_a = env_a.reader();
+    tendb::pbt::Writer writer_a(path_a);
+    write_test_data(writer_a, keys, values);
+    tendb::pbt::Reader reader_a(path_a);
 
     std::string path_b = "test_b.pbt";
-    tendb::pbt::Environment env_b(path_b);
-    write_test_data(env_b, keys, values);
-    tendb::pbt::Reader reader_b = env_b.reader();
+    tendb::pbt::Writer writer_b(path_b);
+    write_test_data(writer_b, keys, values);
+    tendb::pbt::Reader reader_b(path_b);
 
     std::string path_target = "test_target.pbt";
-    tendb::pbt::Environment env_target(path_target);
-    tendb::pbt::Writer writer_target = env_target.writer();
+    tendb::pbt::Writer writer_target(path_target);
     std::array<const tendb::pbt::Reader *, 2> reader_sources{&reader_a, &reader_b};
 
     auto t1 = std::chrono::high_resolution_clock::now();
-    tendb::pbt::Environment::merge(reader_sources.data(), reader_sources.size(), writer_target);
+    writer_target.merge(reader_sources.data(), reader_sources.size());
     auto t2 = std::chrono::high_resolution_clock::now();
 
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);

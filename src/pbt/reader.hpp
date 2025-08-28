@@ -12,14 +12,14 @@ namespace tendb::pbt
     struct Reader
     {
     private:
-        const Storage &storage;
-        const Options &options;
+        const Storage storage;
+        const Options options;
 
         Node *get_node_at_offset(uint64_t offset) const;
         KeyValueItem *get_item_at_offset(uint64_t offset) const;
 
     public:
-        Reader(const Storage &storage, const Options &options);
+        Reader(const std::string &path, const Options &opts = Options());
 
         const Header *get_header() const;
         const KeyValueItem::Iterator begin() const;
