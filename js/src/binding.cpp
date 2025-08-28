@@ -1,145 +1,105 @@
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include <node_api.h>
+#include "napi_macros.hpp"
+#include "napi_utils.hpp"
 
-#include "pbt/environment.hpp"
+#include "pbt/reader.hpp"
+#include "pbt/writer.hpp"
 
-napi_status napi_utf8_to_string(napi_env env, napi_value val, std::string &result)
+typedef ExternalObjectHolder<tendb::pbt::Writer, const std::string &> WriterHolder;
+typedef ExternalObjectHolder<tendb::pbt::Reader, const std::string &> ReaderHolder;
+
+napi_value create_pbt_writer(napi_env env, napi_callback_info cbinfo)
 {
-    napi_status status;
-
-    size_t size;
-    status = napi_get_value_string_utf8(env, val, nullptr, 0, &size);
-    if (status != napi_ok)
-    {
-        napi_throw_error(env, NULL, "Failed to convert argument to string");
-        return status;
-    }
-
-    result.reserve(size + 1);
-    result.resize(size);
-    status = napi_get_value_string_utf8(env, val, &result[0], result.capacity(), nullptr);
-    if (status != napi_ok)
-    {
-        napi_throw_error(env, NULL, "Failed to convert argument to string");
-        return status;
-    }
-
-    return napi_ok;
-}
-
-struct PbtEnvContext
-{
-    std::unique_ptr<tendb::pbt::Environment> pbt_env;
-    napi_value external;
-    napi_ref external_ref;
-
-    PbtEnvContext(const std::string &path) : pbt_env(std::make_unique<tendb::pbt::Environment>(path)) {}
-};
-
-void cleanup_hook_pbt_env(void *arg)
-{
-    if (arg)
-    {
-        delete static_cast<PbtEnvContext *>(arg);
-    }
-}
-
-void finalize_cb_pbt_env(napi_env env, void *data, void *hint)
-{
-    if (data)
-    {
-        napi_status status;
-        PbtEnvContext *pbt_env_ctx = static_cast<PbtEnvContext *>(data);
-
-        status = napi_delete_reference(env, pbt_env_ctx->external_ref);
-        if (status != napi_ok)
-        {
-            napi_throw_error(env, NULL, "Failed to delete external reference");
-            return;
-        }
-
-        status = napi_remove_env_cleanup_hook(env, cleanup_hook_pbt_env, pbt_env_ctx);
-        if (status != napi_ok)
-        {
-            napi_throw_error(env, NULL, "Failed to remove cleanup hook");
-            return;
-        }
-
-        delete pbt_env_ctx;
-    }
-}
-
-napi_value create_pbt_env(napi_env env, napi_callback_info args)
-{
-    napi_status status;
-
-    napi_value argv[1];
-    size_t argc = 1;
-    status = napi_get_cb_info(env, args, &argc, argv, NULL, NULL);
-    if (status != napi_ok)
-    {
-        napi_throw_error(env, NULL, "Failed to parse arguments");
-        return nullptr;
-    }
-    
-    if (argc < 1)
-    {
-        napi_throw_error(env, NULL, "Expected one argument");
-        return nullptr;
-    }
+    NAPI_ARGV(1);
 
     std::string path;
-    status = napi_utf8_to_string(env, argv[0], path);
-    if (status != napi_ok)
+    NAPI_STATUS_THROWS_NULL(napi_utf8_to_string(env, argv[0], path));
+
+    WriterHolder *wh = new WriterHolder(env, path);
+    NAPI_STATUS_THROWS_NULL_CLEANUP(wh->napi_init_eoh(), delete wh);
+
+    return wh->external;
+}
+
+napi_value pbt_writer_add(napi_env env, napi_callback_info cbinfo)
+{
+    NAPI_ARGV(3);
+
+    WriterHolder *wh;
+    NAPI_STATUS_THROWS_NULL(napi_get_value_external(env, argv[0], (void **)&wh));
+
+    std::string_view key;
+    NAPI_STATUS_THROWS_NULL(napi_buffer_to_string_view(env, argv[1], key));
+
+    std::string_view value;
+    NAPI_STATUS_THROWS_NULL(napi_buffer_to_string_view(env, argv[2], value));
+
+    wh->ptr->add(key, value);
+
+    return nullptr;
+}
+
+napi_value pbt_writer_finish(napi_env env, napi_callback_info cbinfo)
+{
+    NAPI_ARGV(1);
+
+    WriterHolder *wh;
+    NAPI_STATUS_THROWS_NULL(napi_get_value_external(env, argv[0], (void **)&wh));
+
+    wh->ptr->finish();
+
+    return nullptr;
+}
+
+napi_value create_pbt_reader(napi_env env, napi_callback_info cbinfo)
+{
+    NAPI_ARGV(1);
+
+    std::string path;
+    NAPI_STATUS_THROWS_NULL(napi_utf8_to_string(env, argv[0], path));
+
+    ReaderHolder *rh = new ReaderHolder(env, path);
+    NAPI_STATUS_THROWS_NULL_CLEANUP(rh->napi_init_eoh(), delete rh);
+
+    return rh->external;
+}
+
+napi_value pbt_reader_get(napi_env env, napi_callback_info cbinfo)
+{
+    NAPI_ARGV(2);
+
+    ReaderHolder *rh;
+    NAPI_STATUS_THROWS_NULL(napi_get_value_external(env, argv[0], (void **)&rh));
+
+    std::string_view key;
+    NAPI_STATUS_THROWS_NULL(napi_buffer_to_string_view(env, argv[1], key));
+
+    napi_value result;
+    const tendb::pbt::KeyValueItem *item = rh->ptr->get(key);
+    if (item)
     {
-        napi_throw_error(env, NULL, "Invalid argument, expected string");
-        return nullptr;
+        rh->increase_ref();
+        NAPI_STATUS_THROWS_NULL(napi_create_external_buffer(env, item->value().size(), (void *)item->value().data(), ReaderHolder::deref_cb, rh, &result));
+    }
+    else
+    {
+        NAPI_STATUS_THROWS_NULL(napi_get_null(env, &result));
     }
 
-    PbtEnvContext *pbt_env_ctx = new PbtEnvContext(path);
-
-    status = napi_add_env_cleanup_hook(env, cleanup_hook_pbt_env, pbt_env_ctx);
-    if (status != napi_ok)
-    {
-        napi_throw_error(env, NULL, "Failed to add cleanup hook");
-        return nullptr;
-    }
-
-    status = napi_create_external(env, pbt_env_ctx, finalize_cb_pbt_env, NULL, &pbt_env_ctx->external);
-    if (status != napi_ok)
-    {
-        napi_throw_error(env, NULL, "Failed to create external");
-        return nullptr;
-    }
-
-    status = napi_create_reference(env, pbt_env_ctx->external, 0, &pbt_env_ctx->external_ref);
-    if (status != napi_ok)
-    {
-        napi_throw_error(env, NULL, "Failed to create external reference");
-        return nullptr;
-    }
-
-    return pbt_env_ctx->external;
+    return result;
 }
 
 napi_value init(napi_env env, napi_value exports)
 {
-    napi_status status;
-    napi_value create_pbt_env_fn;
-
-    status = napi_create_function(env, nullptr, 0, create_pbt_env, nullptr, &create_pbt_env_fn);
-    if (status != napi_ok)
-    {
-        return nullptr;
-    }
-
-    status = napi_set_named_property(env, exports, "create_pbt_env", create_pbt_env_fn);
-    if (status != napi_ok)
-    {
-        return nullptr;
-    }
+    NAPI_EXPORT_FUNCTION(create_pbt_writer);
+    NAPI_EXPORT_FUNCTION(pbt_writer_add);
+    NAPI_EXPORT_FUNCTION(pbt_writer_finish);
+    NAPI_EXPORT_FUNCTION(create_pbt_reader);
+    NAPI_EXPORT_FUNCTION(pbt_reader_get);
 
     return exports;
 }
