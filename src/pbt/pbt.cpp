@@ -495,7 +495,7 @@ const tendb::pbt::KeyValueItem *tendb::pbt::Reader::get(const std::string_view &
     return *itr;
 }
 
-const tendb::pbt::KeyValueItem *tendb::pbt::Reader::get_at(size_t index) const
+const tendb::pbt::KeyValueItem *tendb::pbt::Reader::at(size_t index) const
 {
     auto itr = seek(index);
     if (itr == end())

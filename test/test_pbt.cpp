@@ -86,7 +86,7 @@ void test_get_at()
 
     for (size_t i = 0; i < TEST_NUM_KEYS; ++i)
     {
-        const tendb::pbt::KeyValueItem *entry = reader.get_at(i);
+        const tendb::pbt::KeyValueItem *entry = reader.at(i);
         if (!entry)
         {
             std::cerr << "Entry not found for key: " << keys[i] << std::endl;
