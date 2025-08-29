@@ -57,27 +57,27 @@ napi_status napi_buffer_to_string_view(napi_env env, napi_value val, std::string
 }
 
 template <class T, class... Args>
-struct ExternalObjectHolder
+struct ExternalObject
 {
     std::unique_ptr<T> ptr;
     napi_env env;
     napi_value external;
     napi_ref external_ref;
 
-    ExternalObjectHolder(napi_env env, Args... args) : env(env), ptr(std::make_unique<T>(args...)) {}
+    ExternalObject(napi_env env, Args&&... args) : env(env), ptr(std::make_unique<T>(std::forward<Args>(args)...)) {}
 
     napi_status napi_init_eoh()
     {
         napi_status status;
 
-        status = napi_add_env_cleanup_hook(env, ExternalObjectHolder<T>::cleanup_hook, this);
+        status = napi_add_env_cleanup_hook(env, ExternalObject<T>::cleanup_hook, this);
         if (status != napi_ok)
         {
             napi_throw_error(env, NULL, "Failed to add cleanup hook");
             return status;
         }
 
-        status = napi_create_external(env, this, ExternalObjectHolder<T>::finalize_cb, NULL, &external);
+        status = napi_create_external(env, this, ExternalObject<T>::finalize_cb, NULL, &external);
         if (status != napi_ok)
         {
             napi_throw_error(env, NULL, "Failed to create external");
@@ -126,7 +126,7 @@ struct ExternalObjectHolder
     {
         if (finalize_hint)
         {
-            ExternalObjectHolder<T> *eoh = static_cast<ExternalObjectHolder<T> *>(finalize_hint);
+            ExternalObject<T> *eoh = static_cast<ExternalObject<T> *>(finalize_hint);
             eoh->increase_ref();
         }
     }
@@ -135,7 +135,7 @@ struct ExternalObjectHolder
     {
         if (finalize_hint)
         {
-            ExternalObjectHolder<T> *eoh = static_cast<ExternalObjectHolder<T> *>(finalize_hint);
+            ExternalObject<T> *eoh = static_cast<ExternalObject<T> *>(finalize_hint);
             eoh->decrease_ref();
         }
     }
@@ -144,7 +144,7 @@ struct ExternalObjectHolder
     {
         if (arg)
         {
-            delete static_cast<ExternalObjectHolder<T> *>(arg);
+            delete static_cast<ExternalObject<T> *>(arg);
         }
     }
 
@@ -152,7 +152,7 @@ struct ExternalObjectHolder
     {
         if (finalize_data)
         {
-            ExternalObjectHolder<T> *eoh = static_cast<ExternalObjectHolder<T> *>(finalize_data);
+            ExternalObject<T> *eoh = static_cast<ExternalObject<T> *>(finalize_data);
 
             napi_status status;
 
@@ -163,7 +163,7 @@ struct ExternalObjectHolder
                 return;
             }
 
-            status = napi_remove_env_cleanup_hook(env, ExternalObjectHolder<T>::cleanup_hook, eoh);
+            status = napi_remove_env_cleanup_hook(env, ExternalObject<T>::cleanup_hook, eoh);
             if (status != napi_ok)
             {
                 napi_throw_error(env, NULL, "Failed to remove cleanup hook");

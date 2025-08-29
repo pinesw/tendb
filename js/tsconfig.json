@@ -1,0 +1,13 @@
+{
+    "compilerOptions": {
+        "strict": true,
+        "declaration": true,
+        "declarationMap": true
+    },
+    "files": [
+        "binding.ts"
+    ],
+    "exclude": [
+        "node_modules"
+    ]
+}

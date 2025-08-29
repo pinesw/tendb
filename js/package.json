@@ -1,5 +1,29 @@
 {
+  "name": "@pinesw/tendb",
+  "version": "1.1.1",
+  "main": "./binding.js",
+  "types": "./binding.d.ts",
+  "scripts": {
+    "prepack": "tsc",
+    "install": "node install.mjs"
+  },
   "dependencies": {
     "node-api-headers": "^1.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "ts-node": "^10.9.2"
+  },
+  "license": "Apache-2.0",
+  "files": [
+    "binding.ts",
+    "binding.d.ts",
+    "binding.d.ts.map",
+    "binding.js",
+    "install.mjs"
+  ],
+  "binary": {
+    "url": "https://github.com/pinesw/tendb/releases/download/{package_version}/tendb-{platform}-{arch}-{node_version}.node",
+    "target": "./tendb.node"
   }
 }
