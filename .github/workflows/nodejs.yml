@@ -36,7 +36,7 @@ jobs:
 
       - name: Install Node.js dependencies
         working-directory: js
-        run: npm install
+        run: npm install --ignore-scripts
 
       - name: Print info
         run: |
