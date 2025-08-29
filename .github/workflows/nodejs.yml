@@ -34,6 +34,7 @@ jobs:
           architecture: ${{ matrix.architecture }}
 
       - name: Install Node.js dependencies
+        working-directory: js
         run: npm install
 
       - name: Print info
@@ -69,7 +70,7 @@ jobs:
           cmake -B js/build \
             -S js \
             -DCMAKE_BUILD_TYPE=Release \
-            -DNODE_API_HEADERS="${{ github.workspace }}/node_modules/node-api-headers" \
+            -DNODE_API_HEADERS="${{ github.workspace }}/js/node_modules/node-api-headers" \
             -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/js/build/conan_toolchain.cmake"
 
       - name: Build
