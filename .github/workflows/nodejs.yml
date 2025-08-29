@@ -51,8 +51,9 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Print Conan version and remote
+      - name: Config Conan and print info
         run: |
+            conan remote update conancenter --url https://center2.conan.io
             conan --version
             conan remote list
 
