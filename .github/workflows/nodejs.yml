@@ -1,0 +1,144 @@
+name: Build and release Node.js bindings
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - node: 20
+            architecture: x64
+            os: ubuntu-20.04
+
+          - node: 20
+            architecture: x64
+            os: windows-2022
+
+          - node: 20
+            architecture: arm64
+            os: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v4
+        with:
+          cache: "npm"
+          node-version: ${{ matrix.node }}
+          architecture: ${{ matrix.architecture }}
+
+      - name: Install Node.js dependencies
+        run: npm install
+
+      - name: Print info
+        run: |
+          echo "Node.js version: ${{ matrix.node }}"
+          echo "Architecture: ${{ matrix.architecture }}"
+          echo "Operating System: ${{ matrix.os }}"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - run: pip install -r requirements.txt
+
+      - name: Print Conan version
+        run: conan --version
+
+      - name: Setup CMake
+        uses: jwlawson/actions-setup-cmake@v2.0
+        with:
+          cmake-version: "3.29.x"
+
+      - name: Print CMake version
+        run: cmake --version
+
+      - name: Install conan dependencies
+        run: conan install . -of js/build -pr:a profiles/profile_${{ matrix.os }}_${{ matrix.architecture }}_Release.conf
+
+      - name: Configure CMake
+        shell: bash
+        run: |
+          cmake -B js/build \
+            -S js \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DNODE_API_HEADERS="${{ github.workspace }}/node_modules/node-api-headers" \
+            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/js/build/conan_toolchain.cmake"
+
+      - name: Build
+        run: cmake --build js/build --config Release
+
+      - name: Test
+        run: node -e '(require("./js/build/tendb"), console.log("Require OK!"))'
+
+      - name: Set artifact name
+        id: artifact_name
+        shell: bash
+        run: echo "artifact_name=$(echo tendb-${{ runner.os }}-${{ runner.arch }}-${{ matrix.node }} | awk '{print tolower($0)}')" >> $GITHUB_OUTPUT
+
+      - name: Prepare artifact for upload
+        run: mv js/build/tendb.node ${{ steps.artifact_name.outputs.artifact_name }}.node
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact_name.outputs.artifact_name }}
+          path: ${{ steps.artifact_name.outputs.artifact_name }}.node
+
+  release:
+    needs: build
+    runs-on: ubuntu-20.04
+    if: startsWith(github.ref, 'refs/tags/')
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read tag
+        run: |
+          tag=${GITHUB_REF#refs/tags/}
+          echo "Found tag: $tag"
+          echo "tag=$tag" >> $GITHUB_ENV
+
+      - name: Verify Node package version
+        working-directory: js
+        run: |
+          [[ $(cat package.json | jq -er .version) == $tag ]] || exit 1
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2.0.4
+        with:
+          files: artifacts/**/*.node
+          body: |
+            This is the release body.
+            It can contain multiple lines.
+          draft: true
+          prerelease: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          registry-url: "https://registry.npmjs.org"
+
+      - run: npm ci --ignore-scripts
+        working-directory: js
+
+      - name: Publish Node.js package
+        working-directory: js
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
