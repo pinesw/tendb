@@ -387,7 +387,55 @@ const tendb::pbt::KeyValueItem::Iterator tendb::pbt::Reader::end() const
     return KeyValueItem::Iterator(storage, header->first_node_offset);
 }
 
-const tendb::pbt::KeyValueItem::Iterator tendb::pbt::Reader::seek(size_t index) const
+const tendb::pbt::KeyValueItem::Iterator tendb::pbt::Reader::seek(const std::string_view &key) const
+{
+    const Header *header = get_header();
+
+    if (header->num_items == 0)
+    {
+        return end();
+    }
+
+    uint64_t offset = header->root_offset;
+    uint32_t depth = header->depth;
+    while (depth > 0 && offset != 0)
+    {
+        Node *node = get_node_at_offset(offset);
+        offset = 0;
+
+        for (const auto *child : *node)
+        {
+            if (options.compare_fn(key, child->key()) >= 0)
+            {
+                offset = child->get_offset();
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        --depth;
+    }
+
+    if (offset == 0)
+    {
+        return end();
+    }
+
+    Node *leaf_node = get_node_at_offset(offset);
+    for (const auto *child : *leaf_node)
+    {
+        if (options.compare_fn(key, child->key()) == 0)
+        {
+            return KeyValueItem::Iterator{storage, child->get_offset()};
+        }
+    }
+
+    return end();
+}
+
+const tendb::pbt::KeyValueItem::Iterator tendb::pbt::Reader::seek_at(size_t index) const
 {
     const Header *header = get_header();
 
@@ -437,54 +485,6 @@ const tendb::pbt::KeyValueItem::Iterator tendb::pbt::Reader::seek(size_t index) 
     return end();
 }
 
-const tendb::pbt::KeyValueItem::Iterator tendb::pbt::Reader::seek(const std::string_view &key) const
-{
-    const Header *header = get_header();
-
-    if (header->num_items == 0)
-    {
-        return end();
-    }
-
-    uint64_t offset = header->root_offset;
-    uint32_t depth = header->depth;
-    while (depth > 0 && offset != 0)
-    {
-        Node *node = get_node_at_offset(offset);
-        offset = 0;
-
-        for (const auto *child : *node)
-        {
-            if (options.compare_fn(key, child->key()) >= 0)
-            {
-                offset = child->get_offset();
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        --depth;
-    }
-
-    if (offset == 0)
-    {
-        return end();
-    }
-
-    Node *leaf_node = get_node_at_offset(offset);
-    for (const auto *child : *leaf_node)
-    {
-        if (options.compare_fn(key, child->key()) == 0)
-        {
-            return KeyValueItem::Iterator{storage, child->get_offset()};
-        }
-    }
-
-    return end();
-}
-
 const tendb::pbt::KeyValueItem *tendb::pbt::Reader::get(const std::string_view &key) const
 {
     auto itr = seek(key);
@@ -497,7 +497,7 @@ const tendb::pbt::KeyValueItem *tendb::pbt::Reader::get(const std::string_view &
 
 const tendb::pbt::KeyValueItem *tendb::pbt::Reader::at(size_t index) const
 {
-    auto itr = seek(index);
+    auto itr = seek_at(index);
     if (itr == end())
     {
         return nullptr; // Index out of bounds

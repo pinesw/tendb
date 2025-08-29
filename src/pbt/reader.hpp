@@ -24,8 +24,8 @@ namespace tendb::pbt
         const Header *get_header() const;
         const KeyValueItem::Iterator begin() const;
         const KeyValueItem::Iterator end() const;
-        const KeyValueItem::Iterator seek(size_t index) const;
         const KeyValueItem::Iterator seek(const std::string_view &key) const;
+        const KeyValueItem::Iterator seek_at(size_t index) const;
         const KeyValueItem *get(const std::string_view &key) const;
         const KeyValueItem *at(size_t index) const;
     };
