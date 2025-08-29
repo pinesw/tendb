@@ -51,8 +51,10 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Print Conan version
-        run: conan --version
+      - name: Print Conan version and remote
+        run: |
+            conan --version
+            conan remote list
 
       - name: Setup CMake
         uses: jwlawson/actions-setup-cmake@v2.0
