@@ -13,7 +13,7 @@
   "devDependencies": {
     "@types/node": "^24.3.0",
     "node-api-headers": "^1.5.0",
-    "ts-node": "^10.9.2"
+    "tsx": "^4.20.5"
   },
   "license": "Apache-2.0",
   "files": [
@@ -25,6 +25,6 @@
   ],
   "binary": {
     "url": "https://github.com/pinesw/tendb/releases/download/{package_version}/tendb-{platform}-{arch}-{node_version}.node",
-    "target": "./tendb.node"
+    "target": "./build/Release/tendb.node"
   }
 }

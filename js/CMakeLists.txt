@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.27)
 project(tendb VERSION 0.1.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 
+if(NOT NODE_API_HEADERS)
+    set(NODE_API_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/node_modules/node-api-headers")
+endif()
+
 # Print arguments for debugging
 message(NODE_API_HEADERS="${NODE_API_HEADERS}")
 

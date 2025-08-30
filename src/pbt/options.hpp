@@ -23,7 +23,7 @@ namespace tendb::pbt
 
     struct Options
     {
-        const uint32_t branch_factor = 8;
-        const compare_fn_t compare_fn = compare_lexically;
+        uint32_t branch_factor = 8;
+        compare_fn_t compare_fn = compare_lexically;
     };
 }

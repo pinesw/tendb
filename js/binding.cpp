@@ -10,19 +10,61 @@
 #include "pbt/reader.hpp"
 #include "pbt/writer.hpp"
 
-typedef ExternalObject<tendb::pbt::Writer, const std::string &> ExternalWriter;
-typedef ExternalObject<tendb::pbt::Reader, const std::string &> ExternalReader;
+typedef ExternalObject<tendb::pbt::Writer, const std::string &, const tendb::pbt::Options &> ExternalWriter;
+typedef ExternalObject<tendb::pbt::Reader, const std::string &, const tendb::pbt::Options &> ExternalReader;
 typedef ExternalObject<tendb::pbt::KeyValueItem::Iterator, const tendb::pbt::KeyValueItem::Iterator> ExternalKeyValueIterator;
+typedef ExternalObject<tendb::pbt::compare_fn_t, const tendb::pbt::compare_fn_t &> ExternalCompareFn;
 
 napi_value create_pbt_writer(napi_env env, napi_callback_info cbinfo)
 {
-    NAPI_ARGV(1);
+    NAPI_ARGV(2);
 
     std::string path;
     NAPI_STATUS_THROWS_NULL(napi_utf8_to_string(env, argv[0], path));
 
-    ExternalWriter *wh = new ExternalWriter(env, path);
+    napi_value opts = argv[1];
+    tendb::pbt::Options options;
+
+    bool has_compare_fn;
+    ExternalCompareFn *cfh = nullptr;
+    NAPI_STATUS_THROWS_NULL(napi_has_named_property(env, opts, "compareFn", &has_compare_fn));
+    if (has_compare_fn)
+    {
+        napi_value js_compare_fn;
+        NAPI_STATUS_THROWS_NULL(napi_get_named_property(env, opts, "compareFn", &js_compare_fn));
+
+        tendb::pbt::compare_fn_t compare_fn = [env, js_compare_fn](const std::string_view &a, const std::string_view &b) -> int
+        {
+            napi_value global;
+            NAPI_STATUS_THROWS_NULL(napi_get_global(env, &global));
+
+            napi_value argv[2];
+            NAPI_STATUS_THROWS_NULL(napi_create_external_buffer(env, a.size(), (void *)a.data(), nullptr, nullptr, &argv[0]));
+            NAPI_STATUS_THROWS_NULL(napi_create_external_buffer(env, b.size(), (void *)b.data(), nullptr, nullptr, &argv[1]));
+
+            napi_value result;
+            NAPI_STATUS_THROWS_NULL(napi_call_function(env, global, js_compare_fn, 2, argv, &result));
+
+            int32_t cmp;
+            NAPI_STATUS_THROWS_NULL(napi_get_value_int32(env, result, &cmp));
+
+            return cmp;
+        };
+
+        cfh = new ExternalCompareFn(env, compare_fn);
+        NAPI_STATUS_THROWS_NULL_CLEANUP(cfh->napi_init_eoh(), delete cfh);
+
+        options.compare_fn = *(cfh->ptr);
+    }
+
+    ExternalWriter *wh = new ExternalWriter(env, path, options);
     NAPI_STATUS_THROWS_NULL_CLEANUP(wh->napi_init_eoh(), delete wh);
+
+    if (cfh)
+    {
+        cfh->increase_ref();
+        NAPI_STATUS_THROWS_NULL(napi_add_finalizer(env, wh->external, NULL, ExternalCompareFn::deref_cb, cfh, NULL));
+    }
 
     return wh->external;
 }
@@ -59,13 +101,54 @@ napi_value pbt_writer_finish(napi_env env, napi_callback_info cbinfo)
 
 napi_value create_pbt_reader(napi_env env, napi_callback_info cbinfo)
 {
-    NAPI_ARGV(1);
+    NAPI_ARGV(2);
 
     std::string path;
     NAPI_STATUS_THROWS_NULL(napi_utf8_to_string(env, argv[0], path));
 
-    ExternalReader *rh = new ExternalReader(env, path);
+    napi_value opts = argv[1];
+    tendb::pbt::Options options;
+
+    bool has_compare_fn;
+    ExternalCompareFn *cfh = nullptr;
+    NAPI_STATUS_THROWS_NULL(napi_has_named_property(env, opts, "compareFn", &has_compare_fn));
+    if (has_compare_fn)
+    {
+        napi_value js_compare_fn;
+        NAPI_STATUS_THROWS_NULL(napi_get_named_property(env, opts, "compareFn", &js_compare_fn));
+
+        tendb::pbt::compare_fn_t compare_fn = [env, js_compare_fn](const std::string_view &a, const std::string_view &b) -> int
+        {
+            napi_value global;
+            NAPI_STATUS_THROWS_NULL(napi_get_global(env, &global));
+
+            napi_value argv[2];
+            NAPI_STATUS_THROWS_NULL(napi_create_external_buffer(env, a.size(), (void *)a.data(), nullptr, nullptr, &argv[0]));
+            NAPI_STATUS_THROWS_NULL(napi_create_external_buffer(env, b.size(), (void *)b.data(), nullptr, nullptr, &argv[1]));
+
+            napi_value result;
+            NAPI_STATUS_THROWS_NULL(napi_call_function(env, global, js_compare_fn, 2, argv, &result));
+
+            int32_t cmp;
+            NAPI_STATUS_THROWS_NULL(napi_get_value_int32(env, result, &cmp));
+
+            return cmp;
+        };
+
+        cfh = new ExternalCompareFn(env, compare_fn);
+        NAPI_STATUS_THROWS_NULL_CLEANUP(cfh->napi_init_eoh(), delete cfh);
+
+        options.compare_fn = *(cfh->ptr);
+    }
+
+    ExternalReader *rh = new ExternalReader(env, path, options);
     NAPI_STATUS_THROWS_NULL_CLEANUP(rh->napi_init_eoh(), delete rh);
+
+    if (cfh)
+    {
+        cfh->increase_ref();
+        NAPI_STATUS_THROWS_NULL(napi_add_finalizer(env, rh->external, NULL, ExternalCompareFn::deref_cb, cfh, NULL));
+    }
 
     return rh->external;
 }
@@ -131,7 +214,7 @@ napi_value pbt_reader_begin(napi_env env, napi_callback_info cbinfo)
     NAPI_STATUS_THROWS_NULL_CLEANUP(kih->napi_init_eoh(), delete kih);
 
     rh->increase_ref();
-    NAPI_STATUS_THROWS_NULL(napi_add_finalizer(env, kih->external, rh, ExternalReader::deref_cb, NULL, NULL));
+    NAPI_STATUS_THROWS_NULL(napi_add_finalizer(env, kih->external, NULL, ExternalReader::deref_cb, rh, NULL));
 
     return kih->external;
 }
@@ -147,7 +230,7 @@ napi_value pbt_reader_end(napi_env env, napi_callback_info cbinfo)
     NAPI_STATUS_THROWS_NULL_CLEANUP(kih->napi_init_eoh(), delete kih);
 
     rh->increase_ref();
-    NAPI_STATUS_THROWS_NULL(napi_add_finalizer(env, kih->external, rh, ExternalReader::deref_cb, NULL, NULL));
+    NAPI_STATUS_THROWS_NULL(napi_add_finalizer(env, kih->external, NULL, ExternalReader::deref_cb, rh, NULL));
 
     return kih->external;
 }
@@ -166,7 +249,7 @@ napi_value pbt_reader_seek(napi_env env, napi_callback_info cbinfo)
     NAPI_STATUS_THROWS_NULL_CLEANUP(kih->napi_init_eoh(), delete kih);
 
     rh->increase_ref();
-    NAPI_STATUS_THROWS_NULL(napi_add_finalizer(env, kih->external, rh, ExternalReader::deref_cb, NULL, NULL));
+    NAPI_STATUS_THROWS_NULL(napi_add_finalizer(env, kih->external, NULL, ExternalReader::deref_cb, rh, NULL));
 
     return kih->external;
 }
@@ -185,7 +268,7 @@ napi_value pbt_reader_seek_at(napi_env env, napi_callback_info cbinfo)
     NAPI_STATUS_THROWS_NULL_CLEANUP(kih->napi_init_eoh(), delete kih);
 
     rh->increase_ref();
-    NAPI_STATUS_THROWS_NULL(napi_add_finalizer(env, kih->external, rh, ExternalReader::deref_cb, NULL, NULL));
+    NAPI_STATUS_THROWS_NULL(napi_add_finalizer(env, kih->external, NULL, ExternalReader::deref_cb, rh, NULL));
 
     return kih->external;
 }
