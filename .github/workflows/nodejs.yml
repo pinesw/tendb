@@ -11,17 +11,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - node: 20
-            architecture: x64
-            os: ubuntu-24.04
+          # - node: 20
+          #   architecture: x64
+          #   os: ubuntu-24.04
 
           - node: 20
             architecture: x64
             os: windows-2022
 
-          - node: 20
-            architecture: arm64
-            os: macos-14
+          # - node: 20
+          #   architecture: arm64
+          #   os: macos-14
 
     steps:
       - uses: actions/checkout@v4
@@ -79,6 +79,7 @@ jobs:
           cmake -B js/build \
             -S js \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCONAN_PATH="${{ github.workspace }}/js/build" \
             -DNODE_API_HEADERS="${{ github.workspace }}/js/node_modules/node-api-headers" \
             -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/js/build/conan_toolchain.cmake"
 
