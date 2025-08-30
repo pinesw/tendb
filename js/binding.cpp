@@ -59,8 +59,6 @@ napi_value pbt_writer_finish(napi_env env, napi_callback_info cbinfo)
 
 napi_value create_pbt_reader(napi_env env, napi_callback_info cbinfo)
 {
-    std::cerr << "create_pbt_reader called" << std::endl;
-
     NAPI_ARGV(1);
 
     std::string path;
@@ -82,18 +80,8 @@ napi_value pbt_reader_get(napi_env env, napi_callback_info cbinfo)
     std::string_view key;
     NAPI_STATUS_THROWS_NULL(napi_buffer_to_string_view(env, argv[1], key));
 
-    std::cerr << "pbt_reader_get called with key: ";
-    for (int i = 0; i < key.size(); i++)
-    {
-        unsigned char *ar = (unsigned char *)key.data();
-        std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(ar[i]) << " ";
-    }
-    std::cout << std::dec << "of size " << key.size() << std::endl;
-
     napi_value result;
     const tendb::pbt::KeyValueItem *item = rh->ptr->get(key);
-
-    std::cerr << "Item " << (item ? "found" : "not found") << std::endl;
 
     if (item)
     {

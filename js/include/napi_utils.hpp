@@ -65,20 +65,10 @@ struct ExternalObject
     napi_value external;
     napi_ref external_ref;
 
-    ExternalObject(napi_env env, Args &&...args) : env(env), ptr(std::make_unique<T>(std::forward<Args>(args)...))
-    {
-        std::cerr << "Created ExternalObject " << typeid(T).name() << std::endl;
-    }
-
-    ~ExternalObject()
-    {
-        std::cerr << "Destroying ExternalObject" << typeid(T).name() << std::endl;
-    }
+    ExternalObject(napi_env env, Args &&...args) : env(env), ptr(std::make_unique<T>(std::forward<Args>(args)...)) {}
 
     napi_status napi_init_eoh()
     {
-        std::cerr << "Initializing ExternalObject" << typeid(T).name() << std::endl;
-
         napi_status status;
 
         status = napi_create_external(env, this, ExternalObject<T>::finalize_cb, NULL, &external);
@@ -100,8 +90,6 @@ struct ExternalObject
 
     napi_status increase_ref()
     {
-        std::cerr << "Increasing ref count" << typeid(T).name() << std::endl;
-
         napi_status status;
 
         status = napi_reference_ref(env, external_ref, nullptr);
@@ -116,8 +104,6 @@ struct ExternalObject
 
     napi_status decrease_ref()
     {
-        std::cerr << "Decreasing ref count" << typeid(T).name() << std::endl;
-
         napi_status status;
 
         status = napi_reference_unref(env, external_ref, nullptr);
@@ -132,8 +118,6 @@ struct ExternalObject
 
     static void ref_cb(napi_env env, void *finalize_data, void *finalize_hint)
     {
-        std::cerr << "In ref_cb" << typeid(T).name() << std::endl;
-
         if (finalize_hint)
         {
             ExternalObject<T> *eoh = static_cast<ExternalObject<T> *>(finalize_hint);
@@ -143,8 +127,6 @@ struct ExternalObject
 
     static void deref_cb(napi_env env, void *finalize_data, void *finalize_hint)
     {
-        std::cerr << "In deref_cb" << typeid(T).name() << std::endl;
-
         if (finalize_hint)
         {
             ExternalObject<T> *eoh = static_cast<ExternalObject<T> *>(finalize_hint);
@@ -154,8 +136,6 @@ struct ExternalObject
 
     static void finalize_cb(napi_env env, void *finalize_data, void *finalize_hint)
     {
-        std::cerr << "In finalize_cb" << typeid(T).name() << std::endl;
-
         if (finalize_data)
         {
             ExternalObject<T> *eoh = static_cast<ExternalObject<T> *>(finalize_data);
