@@ -6,5 +6,5 @@ CMakeDeps
 CMakeToolchain
 
 [options]
-boost/*:header_only=False
+boost/*:header_only=True
 boost/*:shared=False
