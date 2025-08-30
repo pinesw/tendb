@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iostream>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -64,18 +65,21 @@ struct ExternalObject
     napi_value external;
     napi_ref external_ref;
 
-    ExternalObject(napi_env env, Args&&... args) : env(env), ptr(std::make_unique<T>(std::forward<Args>(args)...)) {}
+    ExternalObject(napi_env env, Args &&...args) : env(env), ptr(std::make_unique<T>(std::forward<Args>(args)...))
+    {
+        std::cerr << "Created ExternalObject " << typeid(T).name() << std::endl;
+    }
+
+    ~ExternalObject()
+    {
+        std::cerr << "Destroying ExternalObject" << typeid(T).name() << std::endl;
+    }
 
     napi_status napi_init_eoh()
     {
-        napi_status status;
+        std::cerr << "Initializing ExternalObject" << typeid(T).name() << std::endl;
 
-        status = napi_add_env_cleanup_hook(env, ExternalObject<T>::cleanup_hook, this);
-        if (status != napi_ok)
-        {
-            napi_throw_error(env, NULL, "Failed to add cleanup hook");
-            return status;
-        }
+        napi_status status;
 
         status = napi_create_external(env, this, ExternalObject<T>::finalize_cb, NULL, &external);
         if (status != napi_ok)
@@ -96,6 +100,8 @@ struct ExternalObject
 
     napi_status increase_ref()
     {
+        std::cerr << "Increasing ref count" << typeid(T).name() << std::endl;
+
         napi_status status;
 
         status = napi_reference_ref(env, external_ref, nullptr);
@@ -110,6 +116,8 @@ struct ExternalObject
 
     napi_status decrease_ref()
     {
+        std::cerr << "Decreasing ref count" << typeid(T).name() << std::endl;
+
         napi_status status;
 
         status = napi_reference_unref(env, external_ref, nullptr);
@@ -124,6 +132,8 @@ struct ExternalObject
 
     static void ref_cb(napi_env env, void *finalize_data, void *finalize_hint)
     {
+        std::cerr << "In ref_cb" << typeid(T).name() << std::endl;
+
         if (finalize_hint)
         {
             ExternalObject<T> *eoh = static_cast<ExternalObject<T> *>(finalize_hint);
@@ -133,6 +143,8 @@ struct ExternalObject
 
     static void deref_cb(napi_env env, void *finalize_data, void *finalize_hint)
     {
+        std::cerr << "In deref_cb" << typeid(T).name() << std::endl;
+
         if (finalize_hint)
         {
             ExternalObject<T> *eoh = static_cast<ExternalObject<T> *>(finalize_hint);
@@ -140,16 +152,10 @@ struct ExternalObject
         }
     }
 
-    static void cleanup_hook(void *arg)
-    {
-        if (arg)
-        {
-            delete static_cast<ExternalObject<T> *>(arg);
-        }
-    }
-
     static void finalize_cb(napi_env env, void *finalize_data, void *finalize_hint)
     {
+        std::cerr << "In finalize_cb" << typeid(T).name() << std::endl;
+
         if (finalize_data)
         {
             ExternalObject<T> *eoh = static_cast<ExternalObject<T> *>(finalize_data);
@@ -160,13 +166,6 @@ struct ExternalObject
             if (status != napi_ok)
             {
                 napi_throw_error(env, NULL, "Failed to delete external reference");
-                return;
-            }
-
-            status = napi_remove_env_cleanup_hook(env, ExternalObject<T>::cleanup_hook, eoh);
-            if (status != napi_ok)
-            {
-                napi_throw_error(env, NULL, "Failed to remove cleanup hook");
                 return;
             }
 

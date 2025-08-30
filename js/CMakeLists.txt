@@ -8,6 +8,7 @@ endif()
 
 # Print arguments for debugging
 message(NODE_API_HEADERS="${NODE_API_HEADERS}")
+message(CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}")
 
 # Set output directories to be consistent across all platforms
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
