@@ -714,7 +714,7 @@ void tendb::pbt::Writer::finish()
         for (size_t i = 0; i < prev_depth_num_nodes; i += options.branch_factor)
         {
             uint32_t child_start = static_cast<uint32_t>(i);
-            uint32_t child_end = static_cast<uint32_t>(std::min(i + options.branch_factor, prev_depth_num_nodes));
+            uint32_t child_end = static_cast<uint32_t>(std::min<uint64_t>(i + options.branch_factor, prev_depth_num_nodes));
             last_node_offset = appender.get_offset();
             appender.append_internal_node(child_start, child_end, node_itr);
         }
