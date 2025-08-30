@@ -8,12 +8,8 @@ type ExternalWriter = Branded<{}, "ExternalWriter">;
 type ExternalReader = Branded<{}, "ExternalReader">;
 type ExternalKeyValueIterator = Branded<{}, "ExternalKeyValueIterator">;
 
-export interface Options {
-    compareFn: (a: Buffer, b: Buffer) => number;
-}
-
-export function create_pbt_writer(path: string, options: Partial<Options> = {}): ExternalWriter {
-    return binding.create_pbt_writer(path, options);
+export function create_pbt_writer(path: string): ExternalWriter {
+    return binding.create_pbt_writer(path);
 }
 
 export function pbt_writer_add(writer: ExternalWriter, key: Buffer, value: Buffer): void {
@@ -24,8 +20,8 @@ export function pbt_writer_finish(writer: ExternalWriter): void {
     binding.pbt_writer_finish(writer);
 }
 
-export function create_pbt_reader(path: string, options: Partial<Options>): ExternalReader {
-    return binding.create_pbt_reader(path, options);
+export function create_pbt_reader(path: string): ExternalReader {
+    return binding.create_pbt_reader(path);
 }
 
 export function pbt_reader_get(reader: ExternalReader, key: Buffer): Buffer | null {
