@@ -25,6 +25,6 @@
   ],
   "binary": {
     "url": "https://github.com/pinesw/tendb/releases/download/{package_version}/tendb-{platform}-{arch}-{node_version}.node",
-    "target": "./build/Release/tendb.node"
+    "target": "./tendb.node"
   }
 }
