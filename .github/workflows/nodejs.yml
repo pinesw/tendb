@@ -44,12 +44,17 @@ jobs:
           echo "Architecture: ${{ matrix.architecture }}"
           echo "Operating System: ${{ matrix.os }}"
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
+      # - uses: actions/setup-python@v5
+      #   with:
+      #     python-version: "3.11"
+      #     cache: "pip"
 
-      - run: pip install -r requirements.txt
+      # - run: pip install -r requirements.txt
+
+      - name: Install Conan
+        uses: conan-io/setup-conan@v1
+        with:
+          cache_packages: true
 
       - name: Config Conan and print info
         run: |
