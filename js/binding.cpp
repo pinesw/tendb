@@ -132,6 +132,43 @@ napi_value pbt_reader_get(napi_env env, napi_callback_info cbinfo)
     return result;
 }
 
+napi_value pbt_reader_get_copy_to(napi_env env, napi_callback_info cbinfo)
+{
+    NAPI_ARGV(3);
+
+    ExternalReader *rh;
+    NAPI_STATUS_THROWS_NULL(napi_get_value_external(env, argv[0], (void **)&rh));
+
+    std::string_view key;
+    NAPI_STATUS_THROWS_NULL(napi_buffer_to_string_view(env, argv[1], key));
+
+    void *out_data;
+    size_t out_length;
+    NAPI_STATUS_THROWS_NULL(napi_get_buffer_info(env, argv[2], &out_data, &out_length));
+
+    napi_value result;
+    const tendb::pbt::KeyValueItem *item = rh->ptr->get(key);
+
+    if (item)
+    {
+        if (item->value().size() > out_length)
+        {
+            napi_throw_range_error(env, NULL, "Output buffer is too small");
+            return nullptr;
+        }
+
+        memcpy(out_data, item->value().data(), item->value().size());
+
+        NAPI_STATUS_THROWS_NULL(napi_get_boolean(env, true, &result));
+    }
+    else
+    {
+        NAPI_STATUS_THROWS_NULL(napi_get_boolean(env, false, &result));
+    }
+
+    return result;
+}
+
 napi_value pbt_reader_at(napi_env env, napi_callback_info cbinfo)
 {
     NAPI_ARGV(2);
@@ -273,6 +310,30 @@ napi_value pbt_keyvalue_iterator_get_key(napi_env env, napi_callback_info cbinfo
     return result;
 }
 
+napi_value pbt_keyvalue_iterator_get_key_copy_to(napi_env env, napi_callback_info cbinfo)
+{
+    NAPI_ARGV(2);
+
+    ExternalKeyValueIterator *kih;
+    NAPI_STATUS_THROWS_NULL(napi_get_value_external(env, argv[0], (void **)&kih));
+
+    void *out_data;
+    size_t out_length;
+    NAPI_STATUS_THROWS_NULL(napi_get_buffer_info(env, argv[1], &out_data, &out_length));
+
+    const tendb::pbt::KeyValueItem *item = *(*(kih->ptr));
+
+    if (item->key().size() > out_length)
+    {
+        napi_throw_range_error(env, NULL, "Output buffer is too small");
+        return nullptr;
+    }
+
+    memcpy(out_data, item->key().data(), item->key().size());
+
+    return nullptr;
+}
+
 napi_value pbt_keyvalue_iterator_get_value(napi_env env, napi_callback_info cbinfo)
 {
     NAPI_ARGV(1);
@@ -289,6 +350,30 @@ napi_value pbt_keyvalue_iterator_get_value(napi_env env, napi_callback_info cbin
     return result;
 }
 
+napi_value pbt_keyvalue_iterator_get_value_copy_to(napi_env env, napi_callback_info cbinfo)
+{
+    NAPI_ARGV(2);
+
+    ExternalKeyValueIterator *kih;
+    NAPI_STATUS_THROWS_NULL(napi_get_value_external(env, argv[0], (void **)&kih));
+
+    void *out_data;
+    size_t out_length;
+    NAPI_STATUS_THROWS_NULL(napi_get_buffer_info(env, argv[1], &out_data, &out_length));
+
+    const tendb::pbt::KeyValueItem *item = *(*(kih->ptr));
+
+    if (item->value().size() > out_length)
+    {
+        napi_throw_range_error(env, NULL, "Output buffer is too small");
+        return nullptr;
+    }
+
+    memcpy(out_data, item->value().data(), item->value().size());
+
+    return nullptr;
+}
+
 napi_value init(napi_env env, napi_value exports)
 {
     NAPI_EXPORT_FUNCTION(create_pbt_writer);
@@ -297,6 +382,7 @@ napi_value init(napi_env env, napi_value exports)
     NAPI_EXPORT_FUNCTION(pbt_writer_finish);
     NAPI_EXPORT_FUNCTION(create_pbt_reader);
     NAPI_EXPORT_FUNCTION(pbt_reader_get);
+    NAPI_EXPORT_FUNCTION(pbt_reader_get_copy_to);
     NAPI_EXPORT_FUNCTION(pbt_reader_at);
     NAPI_EXPORT_FUNCTION(pbt_reader_begin);
     NAPI_EXPORT_FUNCTION(pbt_reader_end);
@@ -305,7 +391,9 @@ napi_value init(napi_env env, napi_value exports)
     NAPI_EXPORT_FUNCTION(pbt_keyvalue_iterator_increment);
     NAPI_EXPORT_FUNCTION(pbt_keyvalue_iterator_equals);
     NAPI_EXPORT_FUNCTION(pbt_keyvalue_iterator_get_key);
+    NAPI_EXPORT_FUNCTION(pbt_keyvalue_iterator_get_key_copy_to);
     NAPI_EXPORT_FUNCTION(pbt_keyvalue_iterator_get_value);
+    NAPI_EXPORT_FUNCTION(pbt_keyvalue_iterator_get_value_copy_to);
 
     return exports;
 }
