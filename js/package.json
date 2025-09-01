@@ -21,7 +21,8 @@
     "binding.d.ts",
     "binding.d.ts.map",
     "binding.js",
-    "install.mjs"
+    "install.mjs",
+    "*.node"
   ],
   "binary": {
     "url": "https://github.com/pinesw/tendb/releases/download/{package_version}/tendb-{platform}-{arch}-{node_version}.node",

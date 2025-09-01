@@ -140,6 +140,9 @@ jobs:
 
       - run: npm ci --ignore-scripts
         working-directory: js
+      
+      - name: Copy artifacts to package directory
+        run: cp artifacts/**/*.node js/
 
       - name: Publish Node.js package
         working-directory: js
