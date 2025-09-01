@@ -2,6 +2,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <node_api.h>
 #include "napi_macros.hpp"
@@ -41,6 +42,41 @@ napi_value pbt_writer_add(napi_env env, napi_callback_info cbinfo)
     NAPI_STATUS_THROWS_NULL(napi_buffer_to_string_view(env, argv[2], value));
 
     wh->ptr->add(key, value);
+
+    return nullptr;
+}
+
+napi_value pbt_writer_merge(napi_env env, napi_callback_info cbinfo)
+{
+    NAPI_ARGV(2);
+
+    ExternalWriter *wh;
+    NAPI_STATUS_THROWS_NULL(napi_get_value_external(env, argv[0], (void **)&wh));
+
+    bool is_array;
+    NAPI_STATUS_THROWS_NULL(napi_is_array(env, argv[1], &is_array));
+    if (!is_array)
+    {
+        napi_throw_type_error(env, NULL, "Argument must be an array");
+        return nullptr;
+    }
+
+    uint32_t length;
+    NAPI_STATUS_THROWS_NULL(napi_get_array_length(env, argv[1], &length));
+
+    std::vector<tendb::pbt::Reader *> reader_ptrs(length);
+    for (uint32_t i = 0; i < length; i++)
+    {
+        napi_value element;
+        NAPI_STATUS_THROWS_NULL(napi_get_element(env, argv[1], i, &element));
+
+        ExternalReader *rh;
+        NAPI_STATUS_THROWS_NULL(napi_get_value_external(env, element, (void **)&rh));
+
+        reader_ptrs[i] = rh->ptr.get();
+    }
+
+    wh->ptr->merge((const tendb::pbt::Reader **)reader_ptrs.data(), reader_ptrs.size());
 
     return nullptr;
 }
@@ -257,6 +293,7 @@ napi_value init(napi_env env, napi_value exports)
 {
     NAPI_EXPORT_FUNCTION(create_pbt_writer);
     NAPI_EXPORT_FUNCTION(pbt_writer_add);
+    NAPI_EXPORT_FUNCTION(pbt_writer_merge);
     NAPI_EXPORT_FUNCTION(pbt_writer_finish);
     NAPI_EXPORT_FUNCTION(create_pbt_reader);
     NAPI_EXPORT_FUNCTION(pbt_reader_get);

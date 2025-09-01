@@ -121,6 +121,7 @@ void test_merge()
     tendb::pbt::Writer writer_target(path_target);
     std::array<const tendb::pbt::Reader *, 2> reader_sources = {&reader_a, &reader_b};
     writer_target.merge(reader_sources.data(), reader_sources.size());
+    writer_target.finish();
     tendb::pbt::Reader reader_target(path_target);
 
     for (size_t i = 0; i < TEST_NUM_KEYS; ++i)
@@ -252,6 +253,7 @@ void benchmark_merge()
 
     auto t1 = std::chrono::high_resolution_clock::now();
     writer_target.merge(reader_sources.data(), reader_sources.size());
+    writer_target.finish();
     auto t2 = std::chrono::high_resolution_clock::now();
 
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);

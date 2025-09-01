@@ -65,7 +65,19 @@ struct ExternalObject
     napi_value external;
     napi_ref external_ref;
 
-    ExternalObject(napi_env env, Args &&...args) : env(env), ptr(std::make_unique<T>(std::forward<Args>(args)...)) {}
+    ExternalObject(napi_env env, Args &&...args) : env(env), ptr(std::make_unique<T>(std::forward<Args>(args)...))
+    {
+#ifdef TENDB_BINDING_DEBUG
+        std::cerr << "ExternalObject<" << typeid(T).name() << ">() at " << std::hex << this << std::dec << " has ptr " << std::hex << ptr.get() << std::dec << std::endl;
+#endif
+    }
+
+    ~ExternalObject()
+    {
+#ifdef TENDB_BINDING_DEBUG
+        std::cerr << "~ExternalObject<" << typeid(T).name() << ">() at " << std::hex << this << std::dec << std::endl;
+#endif
+    }
 
     napi_status napi_init_eoh()
     {

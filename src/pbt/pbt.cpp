@@ -656,6 +656,7 @@ void tendb::pbt::Writer::merge(const Reader **readers, size_t num_readers)
     {
         const Reader *source = readers[i];
         const Header *header = source->get_header();
+
         total_items += header->num_items;
         iterators.emplace_back(source->begin());
         ends.emplace_back(source->end());
@@ -682,8 +683,6 @@ void tendb::pbt::Writer::merge(const Reader **readers, size_t num_readers)
         add(min_key, (*iterators[min_index])->value());
         ++iterators[min_index];
     }
-
-    finish();
 }
 
 void tendb::pbt::Writer::finish()

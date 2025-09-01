@@ -16,6 +16,10 @@ export function pbt_writer_add(writer: ExternalWriter, key: Buffer, value: Buffe
     binding.pbt_writer_add(writer, key, value);
 }
 
+export function pbt_writer_merge(writer: ExternalWriter, readers: ExternalReader[]): void {
+    binding.pbt_writer_merge(writer, readers);
+}
+
 export function pbt_writer_finish(writer: ExternalWriter): void {
     binding.pbt_writer_finish(writer);
 }
