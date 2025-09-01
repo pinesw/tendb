@@ -32,7 +32,7 @@ export function pbt_reader_get(reader: ExternalReader, key: Buffer): Buffer | nu
     return binding.pbt_reader_get(reader, key);
 }
 
-export function pbt_reader_get_copy_to(reader: ExternalReader, key: Buffer, out: Buffer): boolean {
+export function pbt_reader_get_copy_to(reader: ExternalReader, key: Buffer, out: Buffer): number | null {
     return binding.pbt_reader_get_copy_to(reader, key, out);
 }
 
@@ -68,14 +68,14 @@ export function pbt_keyvalue_iterator_get_key(iterator: ExternalKeyValueIterator
     return binding.pbt_keyvalue_iterator_get_key(iterator);
 }
 
-export function pbt_keyvalue_iterator_get_key_copy_to(iterator: ExternalKeyValueIterator, out: Buffer): void {
-    binding.pbt_keyvalue_iterator_get_key_copy_to(iterator, out);
+export function pbt_keyvalue_iterator_get_key_copy_to(iterator: ExternalKeyValueIterator, out: Buffer): number {
+    return binding.pbt_keyvalue_iterator_get_key_copy_to(iterator, out);
 }
 
 export function pbt_keyvalue_iterator_get_value(iterator: ExternalKeyValueIterator): Buffer {
     return binding.pbt_keyvalue_iterator_get_value(iterator);
 }
 
-export function pbt_keyvalue_iterator_get_value_copy_to(iterator: ExternalKeyValueIterator, out: Buffer): void {
-    binding.pbt_keyvalue_iterator_get_value_copy_to(iterator, out);
+export function pbt_keyvalue_iterator_get_value_copy_to(iterator: ExternalKeyValueIterator, out: Buffer): number {
+    return binding.pbt_keyvalue_iterator_get_value_copy_to(iterator, out);
 }

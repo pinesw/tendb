@@ -159,11 +159,11 @@ napi_value pbt_reader_get_copy_to(napi_env env, napi_callback_info cbinfo)
 
         memcpy(out_data, item->value().data(), item->value().size());
 
-        NAPI_STATUS_THROWS_NULL(napi_get_boolean(env, true, &result));
+        NAPI_STATUS_THROWS_NULL(napi_create_uint32(env, (uint32_t)item->value().size(), &result));
     }
     else
     {
-        NAPI_STATUS_THROWS_NULL(napi_get_boolean(env, false, &result));
+        NAPI_STATUS_THROWS_NULL(napi_get_null(env, &result));
     }
 
     return result;
@@ -331,7 +331,10 @@ napi_value pbt_keyvalue_iterator_get_key_copy_to(napi_env env, napi_callback_inf
 
     memcpy(out_data, item->key().data(), item->key().size());
 
-    return nullptr;
+    napi_value result;
+    NAPI_STATUS_THROWS_NULL(napi_create_uint32(env, (uint32_t)item->key().size(), &result));
+
+    return result;
 }
 
 napi_value pbt_keyvalue_iterator_get_value(napi_env env, napi_callback_info cbinfo)
@@ -371,7 +374,10 @@ napi_value pbt_keyvalue_iterator_get_value_copy_to(napi_env env, napi_callback_i
 
     memcpy(out_data, item->value().data(), item->value().size());
 
-    return nullptr;
+    napi_value result;
+    NAPI_STATUS_THROWS_NULL(napi_create_uint32(env, (uint32_t)item->value().size(), &result));
+
+    return result;
 }
 
 napi_value init(napi_env env, napi_value exports)
