@@ -1,5 +1,31 @@
+const os = require("os");
 const pjson = require("./package.json");
-const binding = require(pjson.binary.target);
+
+let platform;
+switch (os.platform()) {
+    case "win32":
+        platform = "windows";
+        break;
+    case "darwin":
+        platform = "macos";
+        break;
+    case "linux":
+        platform = "linux";
+        break;
+    default:
+        throw new Error("Unsupported platform");
+}
+
+const arch = os.arch();
+const node_version = process.versions.node.split(".")[0];
+
+const path_template = pjson.binary.path;
+const path = path_template
+    .replace("{platform}", platform)
+    .replace("{arch}", arch)
+    .replace("{node_version}", node_version);
+
+const binding = require(path);
 
 declare const __brand: unique symbol;
 type Brand<B> = { [__brand]: B };

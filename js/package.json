@@ -4,8 +4,7 @@
   "main": "./binding.js",
   "types": "./binding.d.ts",
   "scripts": {
-    "prepack": "tsc",
-    "install": "node install.mjs"
+    "prepack": "tsc"
   },
   "dependencies": {
     "node-fetch": "^3.3.2"
@@ -21,11 +20,9 @@
     "binding.d.ts",
     "binding.d.ts.map",
     "binding.js",
-    "install.mjs",
     "*.node"
   ],
   "binary": {
-    "url": "https://github.com/pinesw/tendb/releases/download/{package_version}/tendb-{platform}-{arch}-{node_version}.node",
-    "target": "./tendb.node"
+    "path": "./tendb-{platform}-{arch}-{node_version}.node"
   }
 }
